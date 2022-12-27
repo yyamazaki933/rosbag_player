@@ -1,0 +1,9 @@
+[Desktop Entry]
+
+Type=Application
+Version=1.0
+Name=RosbagPlayer
+Exec=/usr/bin/python3 /home/yudai/rosbag_player/RosbagPlayer %f
+Icon=rosbag_player
+MimeType=application/vnd.sqlite3;
+Terminal=true

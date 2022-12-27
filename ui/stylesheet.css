@@ -1,0 +1,140 @@
+
+QWidget
+{
+    color: white;
+    background-color: rgb(24, 24, 24);
+}
+
+QWidget:disabled
+{
+    color: gray;
+}
+
+QFrame[frameShape="4"],
+QFrame[frameShape="5"]
+{
+    color: rgb(43, 43, 43);
+    border: 1px solid rgb(43, 43, 43);
+}
+
+QScrollArea
+{
+    border: 1px solid rgb(43, 43, 43);
+    border-radius: 3px;
+}
+
+QGroupBox {
+    border: 1px solid rgb(43, 43, 43);
+    border-radius: 3px;
+    margin-top: 10px;
+}
+
+QGroupBox::title {
+    subcontrol-origin: margin;
+    left: 7px;
+    padding: 0px 5px 0px 5px;
+}
+
+QLabel
+{
+    color: rgb(170, 170, 170);
+}
+
+/* QWidget:item:hover
+{
+    background-color: QLinearGradient( x1: 0, y1: 0, x2: 0, y2: 1, stop: 0 #ffa02f, stop: 1 #ca0619);
+    color: #000000;
+}
+
+QWidget:item:selected
+{
+    background-color: QLinearGradient( x1: 0, y1: 0, x2: 0, y2: 1, stop: 0 #ffa02f, stop: 1 #d7801a);
+} */
+
+
+/* QAbstractItemView
+{
+    background-color: QLinearGradient( x1: 0, y1: 0, x2: 0, y2: 1, stop: 0 #4d4d4d, stop: 0.1 #646464, stop: 1 #5d5d5d);
+} */
+
+
+QPushButton
+{
+    padding: 3px;
+    border-style: solid;
+    border-radius: 3px;
+    background-color: rgb(53, 53, 255);
+}
+
+QPushButton:hover
+{
+    background-color: rgb(129, 129, 255);
+}
+
+QPushButton:pressed
+{
+    color: rgb(53, 53, 255);
+    background-color: rgb(255, 255, 255);
+}
+
+QPushButton:disabled
+{
+    background-color: rgb(43, 43, 43);
+}
+
+QLineEdit, QComboBox
+{
+    border-style: solid;
+    background-color: rgb(43, 43, 43);
+    selection-background-color: rgb(53, 53, 255);
+    padding: 3px;
+}
+
+QAbstractItemView
+{
+    background-color: rgb(43, 43, 43);
+}
+
+QPlainTextEdit, QListWidget
+{
+    border-style: solid;
+    background-color: rgb(43, 43, 43);
+    selection-background-color: rgb(53, 53, 255);
+    color: rgb(170, 170, 170);
+}
+
+QSpinBox, QDoubleSpinBox
+{
+    background-color: rgb(43, 43, 43);
+    selection-background-color: rgb(53, 53, 255);
+    padding: 3px;
+}
+
+QScrollBar {
+    border-style: solid;
+    background: rgb(43, 43, 43);
+}
+
+QScrollBar::handle
+{
+    background: rgb(95, 95, 95);
+}
+
+QScrollBar::add-line, QScrollBar::sub-line
+{
+    border: none;
+    background: none;
+}
+
+QProgressBar
+{
+    border-style: solid;
+    background-color: rgb(43, 43, 43);
+    text-align: center;
+}
+
+QProgressBar::chunk
+{
+    background-color: rgb(53, 53, 255);
+    margin: 2px;
+}
