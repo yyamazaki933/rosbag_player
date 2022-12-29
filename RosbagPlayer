@@ -20,6 +20,13 @@ def set_rospath(ros_path):
 if __name__ == '__main__':
     SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 
+    rosbag = ''
+    try:
+        rosbag = sys.argv[1]
+        print("[INFO] app start with rosbag", rosbag)
+    except:
+        print("[INFO] app start")
+
     app = QApplication(sys.argv)
     with open(SCRIPT_DIR + '/ui/stylesheet.css', 'r') as f:
         style = f.read()
@@ -29,12 +36,7 @@ if __name__ == '__main__':
     ui_player.setWindowIcon(QIcon(SCRIPT_DIR + '/img/rosbag_player.png'))
     ui_player.show()
 
-    rosbag = ''
-    try:
-        rosbag = sys.argv[1]
+    if rosbag != '':
         ui_player.set_rosbag(rosbag)
-        print("[INFO] App start with rosbag", rosbag)
-    except:
-        print("[INFO] App start")
-
+        
     sys.exit(app.exec())

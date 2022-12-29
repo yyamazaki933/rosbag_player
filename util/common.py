@@ -1,6 +1,16 @@
 #!/usr/bin/env python3
 
 import subprocess
+import re
+
+
+def execCmd(cmd):
+    print("[INFO] execCmd():", cmd)
+
+    resp = subprocess.run(
+        cmd, shell=True, executable='/bin/bash', capture_output=True, text=True, timeout=3)
+
+    return resp
 
 
 def getNodeList(ros_distro):
@@ -10,8 +20,7 @@ def getNodeList(ros_distro):
     cmd += ' && '
     cmd += 'ros2 node list'
 
-    resp = subprocess.run(cmd, shell=True, executable='/bin/bash',
-                          capture_output=True, text=True, timeout=3)
+    resp = execCmd(cmd)
     nodes = resp.stdout.split('\n')
 
     for item in nodes:
@@ -28,8 +37,7 @@ def getTopicList(ros_distro):
     cmd += ' && '
     cmd += 'ros2 topic list'
 
-    resp = subprocess.run(cmd, shell=True, executable='/bin/bash',
-                          capture_output=True, text=True, timeout=3)
+    resp = execCmd(cmd)
     topics = resp.stdout.split('\n')
 
     for item in topics:
@@ -57,10 +65,8 @@ def getNodeInfo(ros_distro, node_name):
     cmd = 'source /opt/ros/' + ros_distro + '/setup.bash'
     cmd += ' && '
     cmd += 'ros2 node info ' + node_name
-    print(cmd)
 
-    resp = subprocess.run(cmd, shell=True, executable='/bin/bash',
-                          capture_output=True, text=True, timeout=3)
+    resp = execCmd(cmd)
     lines = resp.stdout.split('\n')
 
     '''
@@ -129,10 +135,8 @@ def getTopicInfo(ros_distro, topic_name):
     cmd = 'source /opt/ros/' + ros_distro + '/setup.bash'
     cmd += ' && '
     cmd += 'ros2 topic info -v ' + topic_name
-    print(cmd)
 
-    resp = subprocess.run(cmd, shell=True, executable='/bin/bash',
-                          capture_output=True, text=True, timeout=3)
+    resp = execCmd(cmd)
     lines = resp.stdout.split('\n')
 
     '''
@@ -217,16 +221,40 @@ def getTopicType(ros_distro, topic_name):
     cmd = 'source /opt/ros/' + ros_distro + '/setup.bash'
     cmd += ' && '
     cmd += 'ros2 topic type ' + topic_name
-    print(cmd)
 
-    resp = subprocess.run(cmd, shell=True, executable='/bin/bash',
-                          capture_output=True, text=True, timeout=3)
+    resp = execCmd(cmd)
     return resp.stdout.strip('\n')
+
+
+def getRosbagInfo(ros_distro, bagdir):
+    cmd = 'source /opt/ros/' + ros_distro + '/setup.bash'
+    cmd += ' && '
+    cmd += 'ros2 bag info ' + bagdir
+
+    resp = execCmd(cmd)
+
+    if resp.stdout != '':
+        info = ''
+        dur = 0
+        lines = resp.stdout.split('\n')
+
+        for line in lines:
+            if line == '':
+                continue
+            info += line + '\n'
+
+            if 'Duration:' in line:
+                dur = int(re.split('[:.]', line)[1])
+
+        return True, info, dur
+
+    else:
+        return False, resp.stderr, 0
+
 
 def kill_proc(keyword):
     cmd = 'ps -A -f | grep ros'
-    resp = subprocess.run(
-        cmd, shell=True, executable='/bin/bash', capture_output=True, text=True, timeout=3)
+    resp = execCmd(cmd)
 
     lines = resp.stdout.split('\n')
 
@@ -241,7 +269,4 @@ def kill_proc(keyword):
 
         if keyword in proc:
             cmd = 'kill -9 ' + pid
-            print('kill_proc() : ', cmd)
-            subprocess.run(
-                cmd, shell=True, executable='/bin/bash', capture_output=True, text=True, timeout=3)
-
+            resp = execCmd(cmd)

@@ -32,7 +32,6 @@ class SettingWindow(QtWidgets.QWidget):
         self.le_path.setText(rospath)
 
     def save_log(self):
-
         rosver = self.cb_rosver.currentText()
 
         if rosver == 'ROS':
@@ -53,6 +52,7 @@ class SettingWindow(QtWidgets.QWidget):
             yaml.dump(log, file)
 
         self.updateCommonSetting.emit([self.rosver, self.rosdistro, self.rospath])
+        print("[INFO] save log:", self.conf_file)
         
     def load_log(self):
         try:
@@ -70,6 +70,7 @@ class SettingWindow(QtWidgets.QWidget):
             self.le_distro.setText(self.rosdistro)
             self.le_path.setText(self.rospath)
             self.updateCommonSetting.emit([self.rosver, self.rosdistro, self.rospath])
+            print("[INFO] load log:", self.conf_file)
 
         except FileNotFoundError:
             self.save_log()

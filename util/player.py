@@ -41,8 +41,6 @@ class RosbagPlayer(QtCore.QThread):
         self.loop = loop
 
     def run(self):
-        print("[INFO] Called RosbagPlayer.run()")
-
         cmd = 'source ' + self.msg_source
         cmd += ' && '
         cmd += 'ros2 bag play ' + self.rosbag_dir
@@ -55,7 +53,7 @@ class RosbagPlayer(QtCore.QThread):
         if self.loop:
             cmd += ' --loop'
 
-        print(cmd)
+        print("[INFO] RosbagPlayer.run():", cmd)
 
         self.cmd_proc = subprocess.Popen(
             cmd, shell=True, executable='/bin/bash')
@@ -80,11 +78,10 @@ class RosbagPlayer(QtCore.QThread):
                     self.elapsed = self.offset
 
     def pause(self):
-        print("[INFO] Called RosbagPlayer.pause()")
-
         cmd = 'source ' + self.msg_source
         cmd += ' && '
         cmd += 'ros2 service call /rosbag2_player/toggle_paused rosbag2_interfaces/srv/TogglePaused'
+        print("[INFO] RosbagPlayer.pause():", cmd)
 
         _ = subprocess.run(
             cmd, shell=True, executable='/bin/bash', capture_output=True, text=True, timeout=3)
@@ -95,7 +92,7 @@ class RosbagPlayer(QtCore.QThread):
             self.is_running = True
 
     def stop(self):
-        print("[INFO] Called RosbagPlayer.stop()")
+        print("[INFO] RosbagPlayer.stop()")
 
         self.is_running = False
         self.is_stopped = True
