@@ -9,19 +9,13 @@ GUI player for Rosbag2.
 Run setup scripts.
 
 ```
+cd ~/rosbag_player
 ./setup.sh
 ```
-
-Right-click the Rosbag2(.db3) file.
-
-Click on "Properties" and go to "Open With" tab.
-
-Find "RosbagPlayer" in the list and click "Set as default".
 
 ## Usage
 
 Double-click the Rosbag2(.db3) file to launch the application.
-
 
 ---
 
