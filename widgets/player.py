@@ -125,18 +125,16 @@ class PlayerWindow(QtWidgets.QWidget):
     def bag_info(self):
         bagdir = self.le_bag.text()
 
-        isValid, info, self.duration = common.getRosbagInfo(self.ros_distro, bagdir)
-        
+        isValid, info, self.duration = common.getRosbagInfo(
+            self.ros_distro, bagdir)
+
         self.pb_play.setEnabled(isValid)
 
         self.pte_bag.clear()
         self.pte_bag.setPlainText(info)
-
+        self.pte_bag.setTextCursor(QTextCursor(
+            self.pte_bag.document().findBlockByLineNumber(0)))
         self.progress.setRange(0, self.duration)
-        self.progress.reset()
-
-        row0 = self.pte_bag.document().findBlockByLineNumber(0)
-        self.pte_bag.setTextCursor(QTextCursor(row0))
 
     def pb_play_cb(self):
         bagdir = self.le_bag.text()
