@@ -23,17 +23,7 @@ if __name__ == '__main__':
         style = f.read()
         app.setStyleSheet(style)
 
-    path_conf_file = SCRIPT_DIR + '/path.conf'
-    if not os.path.exists(path_conf_file):
-        with open(path_conf_file, 'w') as f:
-            f.write('/opt/ros/humble/setup.bash')
-    
-    ws_paths = []
-    with open(path_conf_file, 'r') as f:
-        for path in f.readlines():
-            ws_paths.append(path.strip())
-
-    ui_player = PlayerWindow(SCRIPT_DIR + '/ui/player.ui', SCRIPT_DIR + '/config/player.conf', ws_paths)
+    ui_player = PlayerWindow(SCRIPT_DIR + '/ui/player.ui', SCRIPT_DIR + '/config/player.conf')
     ui_player.setWindowIcon(QIcon(SCRIPT_DIR + '/img/rosbag_player.png'))
     ui_player.show()
 

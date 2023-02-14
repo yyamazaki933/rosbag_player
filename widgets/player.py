@@ -13,25 +13,28 @@ import util.common as common
 
 class PlayerWindow(QtWidgets.QWidget):
 
-    def __init__(self, ui_file, conf_file, paths, *args, **kwargs):
+    def __init__(self, ui_file, conf_file, *args, **kwargs):
         super().__init__(*args, **kwargs)
         uic.loadUi(ui_file, self)
 
         self.home_dir = os.getenv('HOME')
         self.player = None
         self.ros_distro = 'humble'
-        self.ros_path = paths[0]
+        self.paths = []
+        self.ros_path = ''
+        self.bagdir = ''   
         self.conf_file = conf_file
         self.duration = 0
         self.loop = False
 
-        for item in paths:
-            self.cb_path.addItem(item)
-        
         self.load_log()
-        self.bag_info()
+        for item in self.paths:
+            self.cb_path.addItem(item)
 
+        self.bag_info()
+        
         self.pb_bag.clicked.connect(self.pb_bag_cb)
+        self.pb_path.clicked.connect(self.pb_path_cb)
         self.pb_play.clicked.connect(self.pb_play_cb)
         self.pb_pause.clicked.connect(self.pb_pause_cb)
         self.pb_reset.clicked.connect(self.pb_reset_cb)
@@ -50,10 +53,10 @@ class PlayerWindow(QtWidgets.QWidget):
         self.ros_path = text
 
     def save_log(self):
-        bagdir = self.le_bag.text()
 
         log = {
-            'rosbag_dir': bagdir,
+            'bagdir': self.bagdir,
+            'paths': self.paths,
         }
 
         with open(self.conf_file, 'w') as file:
@@ -63,9 +66,10 @@ class PlayerWindow(QtWidgets.QWidget):
         try:
             with open(self.conf_file, 'r') as file:
                 log = yaml.safe_load(file)
-                bagdir = log['rosbag_dir']
+                self.bagdir = log['bagdir']
+                self.paths = log['paths']
 
-            self.le_bag.setText(bagdir)
+            self.le_bag.setText(self.bagdir)
 
         except FileNotFoundError:
             self.save_log()
@@ -73,7 +77,18 @@ class PlayerWindow(QtWidgets.QWidget):
     def pb_bag_cb(self):
         bag = QFileDialog.getOpenFileName(
             self, 'Choose Rosbag2 File', self.home_dir, 'SQLite3 database File (*.db3)')[0]
+        if bag == '':
+            return
         self.set_rosbag(bag)
+
+    def pb_path_cb(self):
+        path = QFileDialog.getOpenFileName(
+            self, 'Add Workspace Path', self.home_dir, 'Bash File (*.bash)')[0]
+        if path == '':
+            return
+        self.cb_path.addItem(path)
+        self.paths.append(path)
+        self.save_log()
 
     def pb_loop_cb(self):
         if self.loop:
@@ -98,20 +113,15 @@ class PlayerWindow(QtWidgets.QWidget):
         print('[INFO] set start offset:', value)
 
     def set_rosbag(self, bag):
-        bagdir = os.path.dirname(bag)
-
-        if bagdir != '':
-            bagdir = bagdir
-            self.le_bag.setText(bagdir)
-            self.bag_info()
-            self.save_log()
-            print('[INFO] set rosbag dir:', bagdir)
+        self.bagdir = os.path.dirname(bag)
+        self.le_bag.setText(self.bagdir)
+        self.bag_info()
+        self.save_log()
+        print('[INFO] set rosbag dir:', self.bagdir)
 
     def bag_info(self):
-        bagdir = self.le_bag.text()
-
         isValid, info, self.duration = common.getRosbagInfo(
-            self.ros_distro, bagdir)
+            self.ros_distro, self.bagdir)
 
         self.pb_play.setEnabled(isValid)
 
@@ -122,14 +132,13 @@ class PlayerWindow(QtWidgets.QWidget):
         self.progress.setRange(0, self.duration)
 
     def pb_play_cb(self):
-        bagdir = self.le_bag.text()
         rate = self.sb_rate.value()
         offset = self.sb_offset.value()
 
         self.player = player.RosbagPlayer()
         self.player.playerProglessTick.connect(self.set_progress_offset)
         self.player.playerFinished.connect(self.pb_reset_cb)
-        self.player.setRosbag(bagdir, self.duration)
+        self.player.setRosbag(self.bagdir, self.duration)
         self.player.setSource(self.ros_path)
         self.player.setRate(rate)
         self.player.setStartOffset(offset)
