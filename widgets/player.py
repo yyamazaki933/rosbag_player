@@ -30,6 +30,7 @@ class PlayerWindow(QtWidgets.QWidget):
         self.load_log()
         for item in self.paths:
             self.cb_path.addItem(item)
+        self.ros_path = self.paths[0]
 
         self.bag_info()
         

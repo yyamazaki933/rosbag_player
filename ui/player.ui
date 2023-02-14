@@ -138,9 +138,6 @@
    </item>
    <item row="5" column="3">
     <widget class="Line" name="line">
-     <property name="frameShadow">
-      <enum>QFrame::Plain</enum>
-     </property>
      <property name="lineWidth">
       <number>1</number>
      </property>
@@ -468,9 +465,6 @@
    </item>
    <item row="1" column="3">
     <widget class="Line" name="line_2">
-     <property name="frameShadow">
-      <enum>QFrame::Plain</enum>
-     </property>
      <property name="orientation">
       <enum>Qt::Horizontal</enum>
      </property>
