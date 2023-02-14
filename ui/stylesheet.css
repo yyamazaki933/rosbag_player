@@ -77,9 +77,28 @@ QPushButton:pressed
     background-color: rgb(255, 255, 255);
 }
 
-QPushButton:disabled
+QPushButton:disabled, QToolButton:disabled
 {
     background-color: rgb(43, 43, 43);
+}
+
+QToolButton
+{
+    padding: 3px;
+    border-style: solid;
+    border-radius: 3px;
+    background-color: rgb(63, 63, 63);
+}
+
+QToolButton:hover
+{
+    background-color: rgb(112, 112, 112);
+}
+
+QToolButton:pressed
+{
+    color: rgb(0, 0, 0);
+    background-color: rgb(255, 255, 255);
 }
 
 QLineEdit, QComboBox

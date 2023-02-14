@@ -1,9 +1,7 @@
 #!/usr/bin/env python3
 
 import os
-import re
 import yaml
-import subprocess
 
 from PyQt5 import uic, QtWidgets
 from PyQt5.QtWidgets import QFileDialog
@@ -11,29 +9,25 @@ from PyQt5.QtGui import QTextCursor
 
 import util.player as player
 import util.common as common
-from widgets.setting import SettingWindow
 
 
 class PlayerWindow(QtWidgets.QWidget):
 
-    def __init__(self, ui_file, conf_file, *args, **kwargs):
+    def __init__(self, ui_file, conf_file, paths, *args, **kwargs):
         super().__init__(*args, **kwargs)
         uic.loadUi(ui_file, self)
 
         self.home_dir = os.getenv('HOME')
         self.player = None
-        self.ros_ver = 1
         self.ros_distro = 'humble'
-        self.ros_path = '/opt/ros/' + self.ros_distro + '/setup.bash'
-        self.ui_file = ui_file
+        self.ros_path = paths[0]
         self.conf_file = conf_file
         self.duration = 0
         self.loop = False
 
-        setting_ui_file = ui_file.replace('player.ui', 'setting.ui')
-        setting_conf_file = setting_ui_file.replace(
-            '/ui/setting.ui', '/config/setting.conf')
-
+        for item in paths:
+            self.cb_path.addItem(item)
+        
         self.load_log()
         self.bag_info()
 
@@ -43,18 +37,17 @@ class PlayerWindow(QtWidgets.QWidget):
         self.pb_reset.clicked.connect(self.pb_reset_cb)
         self.sb_offset.valueChanged.connect(self.sb_offset_cb)
         self.sb_rate.valueChanged.connect(self.sb_rate_cb)
-        self.pb_setting.clicked.connect(self.pb_setting_cb)
         self.pb_once.clicked.connect(self.pb_loop_cb)
         self.pb_loop.clicked.connect(self.pb_loop_cb)
-
-        self.ui_setting = SettingWindow(setting_ui_file, setting_conf_file)
-        self.ui_setting.updateCommonSetting.connect(self.set_common_setting)
-        self.ui_setting.load_log()
+        self.cb_path.currentTextChanged.connect(self.cb_path_cb)
 
         self.pb_once.setStyleSheet(
             'QPushButton {background-color: rgb(53, 53, 255);}')
         self.pb_loop.setStyleSheet(
             'QPushButton {background-color: rgb(43, 43, 43);}')
+    
+    def cb_path_cb(self, text):
+        self.ros_path = text
 
     def save_log(self):
         bagdir = self.le_bag.text()
@@ -76,14 +69,6 @@ class PlayerWindow(QtWidgets.QWidget):
 
         except FileNotFoundError:
             self.save_log()
-
-    def set_common_setting(self, settings):
-        self.ros_ver = settings[0]
-        self.ros_distro = settings[1]
-        self.ros_path = settings[2]
-
-    def pb_setting_cb(self):
-        self.ui_setting.show()
 
     def pb_bag_cb(self):
         bag = QFileDialog.getOpenFileName(
