@@ -13,26 +13,23 @@ import util.common as common
 
 class PlayerWindow(QtWidgets.QWidget):
 
-    def __init__(self, ui_file, conf_file, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+    def __init__(self, ui_file:str, ros_distro:str):
+        super().__init__()
         uic.loadUi(ui_file, self)
 
         self.home_dir = os.getenv('HOME')
         self.player = None
-        self.ros_distro = 'humble'
-        self.paths = []
-        self.ros_path = ''
-        self.bagdir = ''   
-        self.conf_file = conf_file
+        self.ros_distro = ros_distro
+        self.ros_path = '/opt/ros/'+ros_distro+'/setup.bash'
+        self.paths = [self.ros_path]
+        self.bagdir = ''
+        self.conf_file = ui_file.replace('.ui', '.conf')
         self.duration = 0
         self.loop = False
 
         self.load_log()
         for item in self.paths:
             self.cb_path.addItem(item)
-        self.ros_path = self.paths[0]
-
-        self.bag_info()
         
         self.pb_bag.clicked.connect(self.pb_bag_cb)
         self.pb_path.clicked.connect(self.pb_path_cb)
@@ -49,6 +46,8 @@ class PlayerWindow(QtWidgets.QWidget):
             'QPushButton {background-color: rgb(53, 53, 255);}')
         self.pb_loop.setStyleSheet(
             'QPushButton {background-color: rgb(43, 43, 43);}')
+
+        self.bag_info()
     
     def cb_path_cb(self, text):
         self.ros_path = text
@@ -163,7 +162,7 @@ class PlayerWindow(QtWidgets.QWidget):
         self.player.stop()
         self.player = None
 
-        common.kill_proc("ros2 bag play")
+        common.kill_proc("bag play")
 
         start = self.sb_offset.value()
         self.progress.setValue(start)
