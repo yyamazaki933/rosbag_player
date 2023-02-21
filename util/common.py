@@ -18,7 +18,7 @@ def getNodeList(ros_distro):
 
     cmd = 'source /opt/ros/' + ros_distro + '/setup.bash'
     cmd += ' && '
-    cmd += 'ros2 node list'
+    cmd += 'rosnode list'
 
     resp = execCmd(cmd)
     nodes = resp.stdout.split('\n')
@@ -35,7 +35,7 @@ def getTopicList(ros_distro):
 
     cmd = 'source /opt/ros/' + ros_distro + '/setup.bash'
     cmd += ' && '
-    cmd += 'ros2 topic list'
+    cmd += 'rostopic list'
 
     resp = execCmd(cmd)
     topics = resp.stdout.split('\n')
@@ -64,32 +64,10 @@ def getNameSpaceList(src_list):
 def getNodeInfo(ros_distro, node_name):
     cmd = 'source /opt/ros/' + ros_distro + '/setup.bash'
     cmd += ' && '
-    cmd += 'ros2 node info ' + node_name
+    cmd += 'rosnode info ' + node_name
 
     resp = execCmd(cmd)
     lines = resp.stdout.split('\n')
-
-    '''
-    /sensing/lidar/front_pandar_qt/ring_outlier_filter
-    Subscribers:
-        /clock: rosgraph_msgs/msg/Clock
-        /parameter_events: rcl_interfaces/msg/ParameterEvent
-        /sensing/lidar/front_pandar_qt/rectified/pointcloud_ex: sensor_msgs/msg/PointCloud2
-    Publishers:
-        /parameter_events: rcl_interfaces/msg/ParameterEvent
-        /rosout: rcl_interfaces/msg/Log
-        /sensing/lidar/front_pandar_qt/outlier_filtered/pointcloud: sensor_msgs/msg/PointCloud2
-    Service Servers:
-        /sensing/lidar/front_pandar_qt/ring_outlier_filter/describe_parameters: rcl_interfaces/srv/DescribeParameters
-        /sensing/lidar/front_pandar_qt/ring_outlier_filter/get_parameter_types: rcl_interfaces/srv/GetParameterTypes
-        /sensing/lidar/front_pandar_qt/ring_outlier_filter/get_parameters: rcl_interfaces/srv/GetParameters
-        /sensing/lidar/front_pandar_qt/ring_outlier_filter/list_parameters: rcl_interfaces/srv/ListParameters
-        /sensing/lidar/front_pandar_qt/ring_outlier_filter/set_parameters: rcl_interfaces/srv/SetParameters
-        /sensing/lidar/front_pandar_qt/ring_outlier_filter/set_parameters_atomically: rcl_interfaces/srv/SetParametersAtomically
-    Service Clients:
-    Action Servers:
-    Action Clients:
-    '''
 
     sub_topics = []
     pub_topics = []
@@ -134,46 +112,10 @@ def getNodeInfo(ros_distro, node_name):
 def getTopicInfo(ros_distro, topic_name):
     cmd = 'source /opt/ros/' + ros_distro + '/setup.bash'
     cmd += ' && '
-    cmd += 'ros2 topic info -v ' + topic_name
+    cmd += 'rostopic info ' + topic_name
 
     resp = execCmd(cmd)
     lines = resp.stdout.split('\n')
-
-    '''
-    Type: sensor_msgs/msg/PointCloud2
-
-    Publisher count: 1
-
-    Node name: ring_outlier_filter
-    Node namespace: /sensing/lidar/front_pandar_qt
-    Topic type: sensor_msgs/msg/PointCloud2
-    Endpoint type: PUBLISHER
-    GID: 01.10.ed.12.0f.5d.a8.53.c7.2f.3b.6f.00.00.4e.03.00.00.00.00.00.00.00.00
-    QoS profile:
-    Reliability: BEST_EFFORT
-    History (Depth): KEEP_LAST (5)
-    Durability: VOLATILE
-    Lifespan: Infinite
-    Deadline: Infinite
-    Liveliness: AUTOMATIC
-    Liveliness lease duration: Infinite
-
-    Subscription count: 1
-
-    Node name: concatenate_data
-    Node namespace: /sensing/lidar
-    Topic type: sensor_msgs/msg/PointCloud2
-    Endpoint type: SUBSCRIPTION
-    GID: 01.10.3c.06.36.28.8b.66.8d.8d.c2.85.00.00.27.04.00.00.00.00.00.00.00.00
-    QoS profile:
-    Reliability: BEST_EFFORT
-    History (Depth): KEEP_LAST (5)
-    Durability: VOLATILE
-    Lifespan: Infinite
-    Deadline: Infinite
-    Liveliness: AUTOMATIC
-    Liveliness lease duration: Infinite
-    '''
 
     pub_nodes = []
     sub_nodes = []
@@ -220,7 +162,7 @@ def getTopicInfo(ros_distro, topic_name):
 def getTopicType(ros_distro, topic_name):
     cmd = 'source /opt/ros/' + ros_distro + '/setup.bash'
     cmd += ' && '
-    cmd += 'ros2 topic type ' + topic_name
+    cmd += 'rostopic type ' + topic_name
 
     resp = execCmd(cmd)
     return resp.stdout.strip('\n')
@@ -229,7 +171,7 @@ def getTopicType(ros_distro, topic_name):
 def getRosbagInfo(ros_distro, bagdir):
     cmd = 'source /opt/ros/' + ros_distro + '/setup.bash'
     cmd += ' && '
-    cmd += 'ros2 bag info ' + bagdir
+    cmd += 'rosbag info ' + bagdir
 
     resp = execCmd(cmd)
 
@@ -243,8 +185,8 @@ def getRosbagInfo(ros_distro, bagdir):
                 continue
             info += line + '\n'
 
-            if 'Duration:' in line:
-                dur = int(re.split('[:.]', line)[1])
+            if 'duration:' in line:
+                dur = int(re.split(r'[(s]', line)[2])
 
         return True, info, dur
 
