@@ -4,11 +4,11 @@ import subprocess
 import re
 
 
-def execCmd(cmd):
+def execCmd(cmd, timeout=3):
     print("[INFO] execCmd():", cmd)
 
     resp = subprocess.run(
-        cmd, shell=True, executable='/bin/bash', capture_output=True, text=True, timeout=3)
+        cmd, shell=True, executable='/bin/bash', capture_output=True, text=True, timeout=timeout)
 
     return resp
 
@@ -251,6 +251,12 @@ def getRosbagInfo(ros_distro, bagdir):
     else:
         return False, resp.stderr, 0
 
+def reindexBag(bagdir:str, ros_distro:str):
+    cmd = 'source /opt/ros/' + ros_distro + '/setup.bash'
+    cmd += ' && '
+    cmd += 'ros2 bag reindex ' + bagdir
+
+    resp = execCmd(cmd, timeout=None)
 
 def kill_proc(keyword):
     cmd = 'ps -A -f | grep ros'

@@ -161,3 +161,26 @@ QProgressBar::chunk
     background-color: rgb(53, 53, 255);
     margin: 2px;
 }
+
+QCheckBox
+{
+    spacing: 5px;
+}
+
+QCheckBox::indicator
+{
+    border: 1px solid rgb(0, 0, 0);
+    border-radius: 3px;
+    width: 13px;
+    height: 13px;
+}
+
+QCheckBox::indicator:unchecked
+{
+    background-color: rgb(43, 43, 43);
+}
+
+QCheckBox::indicator:checked
+{
+    background-color: rgb(53, 53, 255);
+}

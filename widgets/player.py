@@ -4,7 +4,7 @@ import os
 import yaml
 
 from PyQt5 import uic, QtWidgets
-from PyQt5.QtWidgets import QFileDialog
+from PyQt5.QtWidgets import QFileDialog, QMessageBox
 from PyQt5.QtGui import QTextCursor
 
 import util.player as player
@@ -25,7 +25,6 @@ class PlayerWindow(QtWidgets.QWidget):
         self.bagdir = ''
         self.conf_file = ui_file.replace('.ui', '.conf')
         self.duration = 0
-        self.loop = False
 
         self.load_log()
         for item in self.paths:
@@ -38,8 +37,6 @@ class PlayerWindow(QtWidgets.QWidget):
         self.pb_reset.clicked.connect(self.pb_reset_cb)
         self.sb_offset.valueChanged.connect(self.sb_offset_cb)
         self.sb_rate.valueChanged.connect(self.sb_rate_cb)
-        self.pb_once.clicked.connect(self.pb_loop_cb)
-        self.pb_loop.clicked.connect(self.pb_loop_cb)
         self.cb_path.currentTextChanged.connect(self.cb_path_cb)
 
         self.pb_once.setStyleSheet(
@@ -90,21 +87,6 @@ class PlayerWindow(QtWidgets.QWidget):
         self.paths.append(path)
         self.save_log()
 
-    def pb_loop_cb(self):
-        if self.loop:
-            self.loop = False
-            self.pb_once.setStyleSheet(
-                'QPushButton {background-color: rgb(53, 53, 255);}')
-            self.pb_loop.setStyleSheet(
-                'QPushButton {background-color: rgb(43, 43, 43);}')
-        else:
-            self.loop = True
-            self.pb_loop.setStyleSheet(
-                'QPushButton {background-color: rgb(53, 53, 255);}')
-            self.pb_once.setStyleSheet(
-                'QPushButton {background-color: rgb(43, 43, 43);}')
-        print('[INFO] set loop:', self.loop)
-
     def sb_rate_cb(self, value):
         print('[INFO] set rate:', value)
 
@@ -122,7 +104,7 @@ class PlayerWindow(QtWidgets.QWidget):
     def bag_info(self):
         isValid, info, self.duration = common.getRosbagInfo(
             self.ros_distro, self.bagdir)
-
+        
         self.pb_play.setEnabled(isValid)
 
         self.pte_bag.clear()
@@ -131,9 +113,22 @@ class PlayerWindow(QtWidgets.QWidget):
             self.pte_bag.document().findBlockByLineNumber(0)))
         self.progress.setRange(0, self.duration)
 
+        if not os.path.exists(self.bagdir + '/metadata.yaml'):
+            resp = QMessageBox.critical(self, "Error", "Rosbag is broken! \nAre you wants to reindex?", QMessageBox.StandardButton.Ok | QMessageBox.StandardButton.Cancel, QMessageBox.StandardButton.Cancel)
+            print(resp)
+            if resp == QMessageBox.StandardButton.Ok:
+                common.reindexBag(self.bagdir, self.ros_distro)
+                self.bag_info()
+            else:
+                print("cancel")
+
     def pb_play_cb(self):
         rate = self.sb_rate.value()
         offset = self.sb_offset.value()
+        if self.chb_loop.checkState() == 0:
+            loop = False
+        else:
+            loop = True
 
         self.player = player.RosbagPlayer()
         self.player.playerProglessTick.connect(self.set_progress_offset)
@@ -142,12 +137,13 @@ class PlayerWindow(QtWidgets.QWidget):
         self.player.setSource(self.ros_path)
         self.player.setRate(rate)
         self.player.setStartOffset(offset)
-        self.player.setLoop(self.loop)
+        self.player.setLoop(loop)
         self.player.start()
 
         self.pb_play.setEnabled(False)
         self.sb_rate.setEnabled(False)
         self.sb_offset.setEnabled(False)
+        self.chb_loop.setEnabled(False)
         self.pb_reset.setEnabled(True)
         self.pb_pause.setEnabled(True)
 
@@ -169,6 +165,7 @@ class PlayerWindow(QtWidgets.QWidget):
         self.pb_play.setEnabled(True)
         self.sb_rate.setEnabled(True)
         self.sb_offset.setEnabled(True)
+        self.chb_loop.setEnabled(True)
         self.pb_reset.setEnabled(False)
         self.pb_pause.setEnabled(False)
         self.pb_pause.setText('Pause')

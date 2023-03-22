@@ -434,16 +434,12 @@
        </spacer>
       </item>
       <item>
-       <widget class="QPushButton" name="pb_once">
-        <property name="text">
-         <string>Once</string>
+       <widget class="QCheckBox" name="chb_loop">
+        <property name="layoutDirection">
+         <enum>Qt::RightToLeft</enum>
         </property>
-       </widget>
-      </item>
-      <item>
-       <widget class="QPushButton" name="pb_loop">
         <property name="text">
-         <string>Loop</string>
+         <string>Loop : </string>
         </property>
        </widget>
       </item>
