@@ -39,13 +39,9 @@ class PlayerWindow(QtWidgets.QWidget):
         self.sb_rate.valueChanged.connect(self.sb_rate_cb)
         self.cb_path.currentTextChanged.connect(self.cb_path_cb)
 
-        self.pb_once.setStyleSheet(
-            'QPushButton {background-color: rgb(53, 53, 255);}')
-        self.pb_loop.setStyleSheet(
-            'QPushButton {background-color: rgb(43, 43, 43);}')
-
-        self.bag_info()
-    
+        if self.bagdir != '':
+            self.bag_info()
+        
     def cb_path_cb(self, text):
         self.ros_path = text
 
@@ -113,6 +109,9 @@ class PlayerWindow(QtWidgets.QWidget):
             self.pte_bag.document().findBlockByLineNumber(0)))
         self.progress.setRange(0, self.duration)
 
+        if not isValid:
+            return
+        
         if not os.path.exists(self.bagdir + '/metadata.yaml'):
             resp = QMessageBox.critical(self, "Error", "Rosbag is broken! \nAre you wants to reindex?", QMessageBox.StandardButton.Ok | QMessageBox.StandardButton.Cancel, QMessageBox.StandardButton.Cancel)
             print(resp)
