@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 
 import os
+import sys
 import yaml
 
-from PyQt5 import uic, QtWidgets
-from PyQt5.QtWidgets import QFileDialog, QMessageBox
+from PyQt5 import uic, QtWidgets, QtGui
+from PyQt5.QtWidgets import QApplication, QFileDialog, QMessageBox
 from PyQt5.QtGui import QTextCursor
 
 import util.player as player
@@ -171,3 +172,27 @@ class PlayerWindow(QtWidgets.QWidget):
 
     def set_progress_offset(self, value):
         self.progress.setValue(value)
+
+if __name__ == '__main__':
+    SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+
+    rosbag = ''
+    try:
+        rosbag = sys.argv[1]
+        print("[INFO] app start with rosbag", rosbag)
+    except:
+        print("[INFO] app start")
+
+    app = QApplication(sys.argv)
+    with open(SCRIPT_DIR + '/ui/stylesheet.css', 'r') as f:
+        style = f.read()
+        app.setStyleSheet(style)
+
+    ui_player = PlayerWindow(SCRIPT_DIR + '/ui/player.ui', "humble")
+    ui_player.setWindowIcon(QtGui.QIcon(SCRIPT_DIR + '/img/rosbag_player.png'))
+    ui_player.show()
+
+    if rosbag != '':
+        ui_player.set_rosbag(rosbag)
+        
+    sys.exit(app.exec())
