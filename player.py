@@ -6,6 +6,7 @@ import yaml
 import time
 import re
 import subprocess
+import signal
 
 from PyQt5 import QtCore, uic, QtWidgets, QtGui
 from PyQt5.QtWidgets import QApplication, QFileDialog, QMessageBox
@@ -59,26 +60,6 @@ def reindexBag(bagdir:str, path:str):
     resp = execCmd(cmd, timeout=None)
 
 
-def kill_proc(keyword):
-    cmd = 'ps -A -f | grep ros'
-    resp = execCmd(cmd)
-
-    lines = resp.stdout.split('\n')
-
-    for item in lines:
-        if item == '':
-            continue
-
-        item_vec = item.split()
-        pid = item_vec[1]
-        pid = format(pid, '>10')
-        proc = str.join(' ', item_vec[7:])
-
-        if keyword in proc:
-            cmd = 'kill -9 ' + pid
-            resp = execCmd(cmd)
-
-
 class RosbagPlayer(QtCore.QThread):
 
     playerProglessTick = QtCore.pyqtSignal(int)
@@ -88,7 +69,6 @@ class RosbagPlayer(QtCore.QThread):
         super().__init__(None)
 
         self.is_running = False
-        self.is_stopped = False
         self.path = ''
         self.rosbag_dir = ''
         self.rate = 1.0
@@ -128,27 +108,26 @@ class RosbagPlayer(QtCore.QThread):
 
         print("[INFO] RosbagPlayer.run():", cmd)
 
-        self.cmd_proc = subprocess.Popen(
-            cmd, shell=True, executable='/bin/bash')
+        self.proc = subprocess.Popen(
+            cmd, shell=True, executable='/bin/bash', preexec_fn=os.setsid)
         self.is_running = True
 
         timer_tick = 1.0 / self.rate
 
-        while not self.is_stopped:
-            if self.is_running:
+        while True:
+            if not self.is_running:
+                continue
 
-                if self.cmd_proc.poll() != None:
-                    self.playerFinished.emit()
-                    print("[INFO] RosbagPlayer Finished")
-                    break
+            if self.proc.poll() != None:
+                self.playerFinished.emit()
+                print("[INFO] RosbagPlayer Finished")
+                break
 
-                self.playerProglessTick.emit(self.elapsed)
+            self.playerProglessTick.emit(self.elapsed)
+            if self.elapsed <= self.duration:
                 self.elapsed += 1
 
-                time.sleep(timer_tick)
-
-                if self.elapsed > self.duration:
-                    self.elapsed = self.offset
+            time.sleep(timer_tick)
 
     def pause(self):
         cmd = 'source ' + self.path
@@ -167,9 +146,9 @@ class RosbagPlayer(QtCore.QThread):
     def stop(self):
         print("[INFO] RosbagPlayer.stop()")
 
+        os.killpg(self.proc.pid, signal.SIGINT)
         self.is_running = False
-        self.is_stopped = True
-        time.sleep(1)
+        self.playerFinished.emit()
 
 
 class PlayerWindow(QtWidgets.QWidget):
@@ -311,7 +290,7 @@ class PlayerWindow(QtWidgets.QWidget):
 
         self.player = RosbagPlayer()
         self.player.playerProglessTick.connect(self.set_progress_offset)
-        self.player.playerFinished.connect(self.pb_reset_cb)
+        self.player.playerFinished.connect(self.__finished_call)
         self.player.setRosbag(bagdir, self.duration)
         self.player.setSource(path)
         self.player.setRate(rate)
@@ -337,10 +316,8 @@ class PlayerWindow(QtWidgets.QWidget):
 
     def pb_reset_cb(self):
         self.player.stop()
-        self.player = None
-
-        kill_proc("bag play")
-
+    
+    def __finished_call(self):
         start = self.sb_offset.value()
         self.progress.setValue(start)
         self.pb_play.setEnabled(True)
@@ -350,6 +327,7 @@ class PlayerWindow(QtWidgets.QWidget):
         self.pb_reset.setEnabled(False)
         self.pb_pause.setEnabled(False)
         self.pb_pause.setText('Pause')
+        self.player = None
 
     def set_progress_offset(self, value):
         self.progress.setValue(value)
