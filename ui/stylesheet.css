@@ -146,8 +146,7 @@ QProgressBar
     color: white;
     background-color: transparent;
     border: 1px solid rgb(53, 53, 53);
-    border-radius: 16px;
-    padding: 3px;
+    border-radius: 13px;
     text-align: center;
 }
 
@@ -155,5 +154,7 @@ QProgressBar::chunk
 {
     background-color: rgb(80, 80, 255);
     border-radius: 2px;
-    margin: 10px;
+    margin: 5px;
+    margin-top: 10px;
+    margin-bottom: 10px;
 }
