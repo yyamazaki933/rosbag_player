@@ -2,7 +2,7 @@
 
 GUI player for Rosbag2.
 
-<img src="img/demo.png">
+<img src="img/shot.png">
 
 ## Install and Setup
 

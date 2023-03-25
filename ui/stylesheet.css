@@ -15,14 +15,7 @@ QWidget:disabled
     color: gray;
 }
 
-/* QFrame[frameShape="4"],
-QFrame[frameShape="5"]
-{
-    color: rgb(43, 43, 43);
-    border: 1px solid rgb(43, 43, 43);
-} */
-
-QComboBox, QLineEdit, QPlainTextEdit, QListWidget, QScrollArea
+QComboBox, QLineEdit, QPlainTextEdit, QListWidget, QScrollArea, QSpinBox, QDoubleSpinBox
 {
     color: white;
     background-color: transparent;
@@ -113,11 +106,39 @@ QPushButton:disabled, QToolButton:disabled
     background-color: transparent;
 }
 
-
-QSpinBox, QDoubleSpinBox
+QSpinBox::down-button, QSpinBox::up-button, QDoubleSpinBox::down-button, QDoubleSpinBox::up-button
 {
-    selection-background-color: rgb(80, 80, 255);
-    padding: 3px;
+    background: rgb(80, 80, 255);
+    width: 15px;
+    height: 10px;
+    margin: 3px;
+    margin-right: 10px;
+}
+ 
+QSpinBox::down-button, QDoubleSpinBox::down-button
+{
+    border-bottom-right-radius: 5px;
+    border-bottom-left-radius: 5px;
+}
+ 
+QSpinBox::up-button, QDoubleSpinBox::up-button
+{
+    border-top-right-radius: 5px;
+    border-top-left-radius: 5px;
+}
+
+QCheckBox::indicator
+{
+    width: 20px;
+    height: 20px;
+    border: 1px solid rgb(53, 53, 53);
+    border-radius: 5px;
+}
+
+QCheckBox::indicator:checked
+{
+    background-color: rgb(80, 80, 255);
+    border-radius:10px;
 }
 
 QProgressBar
