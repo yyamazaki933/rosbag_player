@@ -74,8 +74,8 @@ QPushButton
 
 QPushButton:hover
 {
-    border-color: rgb(100, 100, 255);
-    background-color: rgb(100, 100, 255);
+    border-color: rgb(110, 110, 255);
+    background-color: rgb(110, 110, 255);
 }
 
 QToolButton
@@ -114,7 +114,12 @@ QSpinBox::down-button, QSpinBox::up-button, QDoubleSpinBox::down-button, QDouble
     margin: 3px;
     margin-right: 10px;
 }
- 
+
+QSpinBox::down-button:hover, QSpinBox::up-button:hover, QDoubleSpinBox::down-button:hover, QDoubleSpinBox::up-button:hover
+{
+    background: rgb(110, 110, 255);
+}
+
 QSpinBox::down-button, QDoubleSpinBox::down-button
 {
     border-bottom-right-radius: 5px;
@@ -131,14 +136,24 @@ QCheckBox::indicator
 {
     width: 20px;
     height: 20px;
-    border: 1px solid rgb(53, 53, 53);
+    background-color: rgb(53, 53, 53);
     border-radius: 5px;
+}
+
+QCheckBox::indicator:hover
+{
+    background-color: gray;
 }
 
 QCheckBox::indicator:checked
 {
     background-color: rgb(80, 80, 255);
     border-radius:10px;
+}
+
+QCheckBox::indicator:checked:hover
+{
+    background-color: rgb(110, 110, 255);
 }
 
 QProgressBar

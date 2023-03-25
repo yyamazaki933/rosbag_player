@@ -36,6 +36,12 @@
       <property name="spacing">
        <number>0</number>
       </property>
+      <property name="leftMargin">
+       <number>0</number>
+      </property>
+      <property name="rightMargin">
+       <number>0</number>
+      </property>
       <property name="bottomMargin">
        <number>0</number>
       </property>
@@ -163,6 +169,19 @@
          </size>
         </property>
        </spacer>
+      </item>
+      <item>
+       <widget class="QToolButton" name="pb_filter">
+        <property name="minimumSize">
+         <size>
+          <width>150</width>
+          <height>0</height>
+         </size>
+        </property>
+        <property name="text">
+         <string>Topic Filter</string>
+        </property>
+       </widget>
       </item>
      </layout>
     </widget>

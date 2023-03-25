@@ -9,7 +9,7 @@ import subprocess
 import signal
 
 from PyQt5 import QtCore, uic, QtWidgets, QtGui
-from PyQt5.QtWidgets import QApplication, QFileDialog, QMessageBox
+from PyQt5.QtWidgets import QApplication, QFileDialog, QMessageBox, QListWidgetItem
 from PyQt5.QtGui import QTextCursor
 
 
@@ -36,6 +36,7 @@ def getRosbagInfo(bagdir:str, path:str):
     if resp.stdout != '':
         info = ''
         dur = 0
+        topics = []
         lines = resp.stdout.split('\n')
 
         for line in lines:
@@ -46,10 +47,13 @@ def getRosbagInfo(bagdir:str, path:str):
             if 'Duration:' in line:
                 dur = int(re.split('[:.]', line)[1])
 
-        return True, info, dur
+            if 'Topic:' in line:
+                topics.append(re.split(r'Topic: | \|', line)[1])
+
+        return True, info, dur, topics
 
     else:
-        return False, resp.stderr, 0
+        return False, resp.stderr, 0, []
 
 
 def reindexBag(bagdir:str, path:str):
@@ -74,12 +78,11 @@ class RosbagPlayer(QtCore.QThread):
         self.rate = 1.0
         self.offset = 0
         self.elapsed = 0
-        self.duration = 0
         self.loop = False
+        self.topics = []
 
-    def setRosbag(self, rosbag_dir:str, duration:int):
+    def setRosbag(self, rosbag_dir:str):
         self.rosbag_dir = rosbag_dir
-        self.duration = duration
 
     def setSource(self, path:str):
         self.path = path
@@ -93,6 +96,9 @@ class RosbagPlayer(QtCore.QThread):
     def setLoop(self, loop):
         self.loop = loop
 
+    def setPubTopics(self, topics):
+        self.topics = topics
+
     def run(self):
         cmd = 'source ' + self.path
         cmd += ' && '
@@ -105,6 +111,8 @@ class RosbagPlayer(QtCore.QThread):
             self.elapsed = self.offset
         if self.loop:
             cmd += ' --loop'
+        if self.topics:
+            cmd += ' --topics ' + str.join(' ', self.topics)
 
         print("[INFO] RosbagPlayer.run():", cmd)
 
@@ -124,10 +132,8 @@ class RosbagPlayer(QtCore.QThread):
                 break
 
             self.playerProglessTick.emit(self.elapsed)
-            if self.elapsed <= self.duration:
-                self.elapsed += 1
-
             time.sleep(timer_tick)
+            self.elapsed += 1
 
     def pause(self):
         cmd = 'source ' + self.path
@@ -156,26 +162,28 @@ class PlayerWindow(QtWidgets.QWidget):
     def __init__(self):
         super().__init__()
         uic.loadUi(SCRIPT_DIR + "/ui/player.ui", self)
+        
+        self.filter_ui = uic.loadUi(SCRIPT_DIR + "/ui/filter.ui")
 
         self.home_dir = os.getenv('HOME')
         self.player = None
-        self.duration = 0
         self.log_file = SCRIPT_DIR + "/player.log"
 
-        self.pb_bag.clicked.connect(self.pb_bag_cb)
-        self.pb_path.clicked.connect(self.pb_path_cb)
-        self.pb_play.clicked.connect(self.pb_play_cb)
-        self.pb_pause.clicked.connect(self.pb_pause_cb)
-        self.pb_reset.clicked.connect(self.pb_reset_cb)
-        self.sb_offset.valueChanged.connect(self.sb_offset_cb)
-        self.sb_rate.valueChanged.connect(self.sb_rate_cb)
+        self.pb_bag.clicked.connect(self.__pb_bag_call)
+        self.pb_path.clicked.connect(self.__pb_path_call)
+        self.pb_play.clicked.connect(self.__pb_play_call)
+        self.pb_pause.clicked.connect(self.__pb_pause_call)
+        self.pb_reset.clicked.connect(self.__pb_reset_call)
+        self.pb_filter.clicked.connect(self.__pb_filter_call)
+        self.sb_offset.valueChanged.connect(self.__sb_offset_call)
+        self.sb_rate.valueChanged.connect(self.__sb_rate_call)
         self.le_path.setText(DEFAULT_PATH)
 
         self.load_log()
         bagdir = self.le_bag.text()
         if bagdir != "":
-            self.load_config()
             self.bag_info()
+            self.load_config()
 
     def save_log(self):
         bagdir = self.le_bag.text()
@@ -198,36 +206,49 @@ class PlayerWindow(QtWidgets.QWidget):
         path = self.le_path.text()
         start = self.sb_offset.value()
         rate = self.sb_rate.value()
+        filtered_topics = self.__get_filtered_topics()
+        loop = int(self.chb_loop.checkState())
+
         config = {
             'path': path,
             'start': start,
-            'rate': rate, }
+            'rate': rate, 
+            'filtered_topics': filtered_topics,
+            'loop': loop,
+            }
+        
         with open(config_file, 'w') as f:
             yaml.dump(config, f)
 
     def load_config(self):
         bagdir = self.le_bag.text()
         config_file = bagdir + "/player.conf"
+
         if os.path.exists(config_file):
             with open(config_file, 'r') as f:
                 config = yaml.safe_load(f)
                 path = config['path']
                 start = config['start']
                 rate = config['rate']
+                filtered_topics = config['filtered_topics']
+                loop = config['loop']
+            
+            self.__set_filtered_topics(filtered_topics)
             self.le_path.setText(path)
             self.sb_offset.setValue(start)
             self.sb_rate.setValue(rate)
+            self.chb_loop.setCheckState(loop)
         else:
             self.save_config()
 
-    def pb_bag_cb(self):
+    def __pb_bag_call(self):
         bag = QFileDialog.getOpenFileName(
             self, 'Choose Rosbag2 File', self.home_dir, 'SQLite3 database File (*.db3)')[0]
         if bag == '':
             return
         self.set_rosbag(bag)
 
-    def pb_path_cb(self):
+    def __pb_path_call(self):
         path = QFileDialog.getOpenFileName(
             self, 'Choose path file', self.home_dir, 'Bash File (setup.bash)')[0]
         if path == '':
@@ -236,10 +257,10 @@ class PlayerWindow(QtWidgets.QWidget):
         self.bag_info()
         self.save_config()
 
-    def sb_rate_cb(self, value):
+    def __sb_rate_call(self, value):
         print('[INFO] set rate:', value)
 
-    def sb_offset_cb(self, value):
+    def __sb_offset_call(self, value):
         self.set_progress_offset(value)
         print('[INFO] set start offset:', value)
 
@@ -254,7 +275,7 @@ class PlayerWindow(QtWidgets.QWidget):
     def bag_info(self):
         bagdir = self.le_bag.text()
         path = self.le_path.text()
-        isValid, info, self.duration = getRosbagInfo(bagdir, path)
+        isValid, info, duration, topics = getRosbagInfo(bagdir, path)
 
         self.pb_play.setEnabled(isValid)
 
@@ -262,7 +283,8 @@ class PlayerWindow(QtWidgets.QWidget):
         self.pte_bag.setPlainText(info)
         self.pte_bag.setTextCursor(QTextCursor(
             self.pte_bag.document().findBlockByLineNumber(0)))
-        self.progress.setRange(0, self.duration)
+        self.progress.setRange(0, duration)
+        self.sb_offset.setRange(0, duration)
 
         if not os.path.exists(bagdir):
             return
@@ -277,25 +299,61 @@ class PlayerWindow(QtWidgets.QWidget):
             else:
                 print("cancel")
 
-    def pb_play_cb(self):
+        self.filter_ui.topic_list.clear()
+        
+        for topic in topics:
+            item = QListWidgetItem(topic)
+            item.setCheckState(QtCore.Qt.CheckState.Checked)
+            self.filter_ui.topic_list.addItem(item)
+
+    def __pb_filter_call(self):
+        self.filter_ui.show()
+
+    def __get_filtered_topics(self):
+        checked_topics = []
+        unchecked_cnt = 0
+        for i in range(self.filter_ui.topic_list.count()):
+            item = self.filter_ui.topic_list.item(i)
+            if item.checkState() == QtCore.Qt.CheckState.Checked:
+                checked_topics.append(item.text())
+            else:
+                unchecked_cnt+=1
+        
+        if unchecked_cnt == 0:
+            return []
+        else:
+            return checked_topics
+    
+    def __set_filtered_topics(self, enabled_topics):
+        if not enabled_topics:
+            return
+        for i in range(self.filter_ui.topic_list.count()):
+            item = self.filter_ui.topic_list.item(i)
+            if item.text() not in enabled_topics:
+                item.setCheckState(QtCore.Qt.CheckState.Unchecked)
+
+    def __pb_play_call(self):
         bagdir = self.le_bag.text()
         path = self.le_path.text()
         rate = self.sb_rate.value()
         offset = self.sb_offset.value()
 
-        if self.chb_loop.checkState() == 0:
-            loop = False
-        else:
+        if self.chb_loop.checkState() == QtCore.Qt.CheckState.Checked:
             loop = True
+        else:
+            loop = False
+        
+        filterd_topics = self.__get_filtered_topics()
 
         self.player = RosbagPlayer()
         self.player.playerProglessTick.connect(self.set_progress_offset)
         self.player.playerFinished.connect(self.__finished_call)
-        self.player.setRosbag(bagdir, self.duration)
+        self.player.setRosbag(bagdir)
         self.player.setSource(path)
         self.player.setRate(rate)
         self.player.setStartOffset(offset)
         self.player.setLoop(loop)
+        self.player.setPubTopics(filterd_topics)
         self.player.start()
 
         self.pb_play.setEnabled(False)
@@ -307,14 +365,14 @@ class PlayerWindow(QtWidgets.QWidget):
         self.save_config()
         self.save_log()
 
-    def pb_pause_cb(self):
+    def __pb_pause_call(self):
         self.player.pause()
         if self.player.is_running:
             self.pb_pause.setText('Pause')
         else:
             self.pb_pause.setText('Resume')
 
-    def pb_reset_cb(self):
+    def __pb_reset_call(self):
         self.player.stop()
     
     def __finished_call(self):
@@ -327,6 +385,7 @@ class PlayerWindow(QtWidgets.QWidget):
         self.pb_reset.setEnabled(False)
         self.pb_pause.setEnabled(False)
         self.pb_pause.setText('Pause')
+        time.sleep(1)
         self.player = None
 
     def set_progress_offset(self, value):
