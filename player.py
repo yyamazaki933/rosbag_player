@@ -81,10 +81,10 @@ class RosbagPlayer(QtCore.QThread):
         self.loop = False
         self.topics = []
 
-    def setRosbag(self, rosbag_dir:str):
+    def setRosbag(self, rosbag_dir: str):
         self.rosbag_dir = rosbag_dir
 
-    def setSource(self, path:str):
+    def setSource(self, path: str):
         self.path = path
 
     def setRate(self, rate):
@@ -162,7 +162,7 @@ class PlayerWindow(QtWidgets.QWidget):
     def __init__(self):
         super().__init__()
         uic.loadUi(SCRIPT_DIR + "/ui/player.ui", self)
-        
+
         self.filter_ui = uic.loadUi(SCRIPT_DIR + "/ui/filter.ui")
 
         self.home_dir = os.getenv('HOME')
@@ -212,13 +212,14 @@ class PlayerWindow(QtWidgets.QWidget):
         config = {
             'path': path,
             'start': start,
-            'rate': rate, 
+            'rate': rate,
             'filtered_topics': filtered_topics,
             'loop': loop,
-            }
-        
-        with open(config_file, 'w') as f:
-            yaml.dump(config, f)
+        }
+
+        if os.path.exists(bagdir):
+            with open(config_file, 'w') as f:
+                yaml.dump(config, f)
 
     def load_config(self):
         bagdir = self.le_bag.text()
@@ -232,7 +233,7 @@ class PlayerWindow(QtWidgets.QWidget):
                 rate = config['rate']
                 filtered_topics = config['filtered_topics']
                 loop = config['loop']
-            
+
             self.__set_filtered_topics(filtered_topics)
             self.le_path.setText(path)
             self.sb_offset.setValue(start)
@@ -300,7 +301,7 @@ class PlayerWindow(QtWidgets.QWidget):
                 print("cancel")
 
         self.filter_ui.topic_list.clear()
-        
+
         for topic in topics:
             item = QListWidgetItem(topic)
             item.setCheckState(QtCore.Qt.CheckState.Checked)
@@ -317,13 +318,13 @@ class PlayerWindow(QtWidgets.QWidget):
             if item.checkState() == QtCore.Qt.CheckState.Checked:
                 checked_topics.append(item.text())
             else:
-                unchecked_cnt+=1
-        
+                unchecked_cnt += 1
+
         if unchecked_cnt == 0:
             return []
         else:
             return checked_topics
-    
+
     def __set_filtered_topics(self, enabled_topics):
         if not enabled_topics:
             return
@@ -342,7 +343,7 @@ class PlayerWindow(QtWidgets.QWidget):
             loop = True
         else:
             loop = False
-        
+
         filterd_topics = self.__get_filtered_topics()
 
         self.player = RosbagPlayer()
@@ -374,7 +375,7 @@ class PlayerWindow(QtWidgets.QWidget):
 
     def __pb_reset_call(self):
         self.player.stop()
-    
+
     def __finished_call(self):
         start = self.sb_offset.value()
         self.progress.setValue(start)
