@@ -17,13 +17,9 @@ DEFAULT_PATH = "/opt/ros/humble/setup.bash"
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 
 
-def execCmd(cmd, timeout=3):
+def execCmd(cmd):
     print("[INFO] execCmd():", cmd)
-
-    resp = subprocess.run(
-        cmd, shell=True, executable='/bin/bash', capture_output=True, text=True, timeout=timeout)
-
-    return resp
+    return subprocess.run(cmd, shell=True, executable='/bin/bash', capture_output=True, text=True)
 
 
 def getRosbagInfo(bagdir:str, path:str):
@@ -61,7 +57,7 @@ def reindexBag(bagdir:str, path:str):
     cmd += ' && '
     cmd += 'ros2 bag reindex ' + bagdir
 
-    resp = execCmd(cmd, timeout=None)
+    resp = execCmd(cmd)
 
 
 class RosbagPlayer(QtCore.QThread):
@@ -142,7 +138,7 @@ class RosbagPlayer(QtCore.QThread):
         print("[INFO] RosbagPlayer.pause():", cmd)
 
         _ = subprocess.run(
-            cmd, shell=True, executable='/bin/bash', capture_output=True, text=True, timeout=3)
+            cmd, shell=True, executable='/bin/bash', capture_output=True, text=True)
 
         if self.is_running:
             self.is_running = False
