@@ -3,7 +3,7 @@
 Type=Application
 Version=1.0
 Name=RosbagPlayer
-Exec=/usr/bin/python3 PATH/player.py %f
+Exec=bash PATH/launch.sh %f
 Icon=rosbag_player
 MimeType=application/vnd.sqlite3;
 Terminal=true
