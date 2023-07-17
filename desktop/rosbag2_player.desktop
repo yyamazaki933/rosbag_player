@@ -2,8 +2,8 @@
 
 Type=Application
 Version=1.0
-Name=RosbagPlayer
+Name=Rosbag2 Player
 Exec=bash PATH/launch.sh %f
-Icon=rosbag_player
+Icon=rosbag2_player
 MimeType=application/vnd.sqlite3;
 Terminal=true
