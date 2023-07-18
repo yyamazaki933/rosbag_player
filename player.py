@@ -28,9 +28,9 @@ def getRosbagInfo(bagdir:str):
     cmd += ' && '
     cmd += 'ros2 bag info ' + bagdir
     resp = execCmd(cmd)
-
+    
+    baginfo = {}
     if resp.stdout != '':
-        baginfo = {}
         desc = ""
         topics = []
         lines = resp.stdout.split('\n')
