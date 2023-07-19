@@ -81,6 +81,7 @@ class RosbagPlayer():
     def __init__(self):
         self.home_dir = os.getenv('HOME')
         self.log_file = SCRIPT_DIR + "/player.log"
+        self.startup_bag = ""
         self.rate = 1.0
         self.offset = 0
         self.loop = False
@@ -142,6 +143,8 @@ class RosbagPlayer():
         self.tx_info.read_only = True
         self.tx_info.multiline = True
         self.tx_info.min_lines = 30
+        self.tx_info.text_size = 14
+        self.tx_info.text_style = ft.TextStyle(font_family="Ubuntu Mono")
         self.lv_tpic = ft.ListView(expand=True)
         row5 = ft.Row(controls=[self.tx_info, self.lv_tpic], expand=True, vertical_alignment=ft.CrossAxisAlignment.STRETCH)
 
@@ -167,7 +170,11 @@ class RosbagPlayer():
         self.enableButton(self.bt_play, False)
         self.enableButton(self.bt_paus, False)
         self.enableButton(self.bt_rset, False)
-        self.load_log()
+
+        if self.startup_bag:
+            self.set_bag(self.startup_bag)
+        else:
+            self.load_log()
         self.page.update()
 
     def __bt_bag_clicked(self, e):
@@ -390,7 +397,12 @@ class RosbagPlayer():
             self.sw_lop.value = loop
             self.set_filtered_topics(topics)
         except:
-            self.save_config()
+            self.ti_pth.value = DEFAULT_PATH
+            self.set_progress(0)
+            self.ti_ofs.value = 0
+            self.ti_rat.value = 1.0
+            self.sw_lop.value = False
+            self.set_filtered_topics(self.baginfo["topics"])
 
     def set_bag(self, bag: str):
         print('set_bag:', bag)
@@ -461,8 +473,8 @@ if __name__ == '__main__':
     rosbag = ''
     try:
         rosbag = sys.argv[1]
+        player.startup_bag = rosbag
         print("app start with rosbag", rosbag)
-        player.set_bag(rosbag)
     except:
         print("app start")
 
