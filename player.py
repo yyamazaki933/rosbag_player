@@ -2,7 +2,6 @@
 
 import os
 import sys
-from time import sleep
 import re
 import subprocess
 import signal
@@ -23,12 +22,12 @@ def execCmd(cmd, timeout=None):
     return subprocess.run(cmd, shell=True, executable='/bin/bash', capture_output=True, text=True, timeout=timeout)
 
 
-def getRosbagInfo(bagdir:str):
+def getRosbagInfo(bagdir: str):
     cmd = 'source ' + DEFAULT_PATH
     cmd += ' && '
     cmd += 'ros2 bag info ' + bagdir
     resp = execCmd(cmd)
-    
+
     baginfo = {}
     if resp.stdout != '':
         desc = ""
@@ -41,7 +40,7 @@ def getRosbagInfo(bagdir:str):
 
             if 'Duration:' in line:
                 dur = float(re.split(r'[:s]', line)[1])
-            
+
             if "Start" in line:
                 start = float(re.split(r'[()]', line)[1])
 
@@ -53,7 +52,7 @@ def getRosbagInfo(bagdir:str):
                 continue
 
             desc += line + '\n'
-        
+
         baginfo["desc"] = desc
         baginfo["start"] = start
         baginfo["end"] = end
@@ -69,11 +68,27 @@ def getRosbagInfo(bagdir:str):
         return False, baginfo
 
 
-def reindexBag(bagdir:str):
+def reindexBag(bagdir: str):
     cmd = 'source ' + DEFAULT_PATH
     cmd += ' && '
     cmd += 'ros2 bag reindex ' + bagdir
     resp = execCmd(cmd)
+
+
+class PushButton(ft.ElevatedButton):
+    def __init__(self, text: str | None = None, expand: bool | int | None = None, on_click=None, theme_color: str = None):
+        super().__init__(text=text, expand=expand, on_click=on_click, bgcolor=theme_color)
+        self.theme_color = theme_color
+
+    def enable(self, state=True):
+        if state:
+            self.bgcolor = self.theme_color
+            self.update()
+            self.disabled = False
+        else:
+            self.bgcolor = color.GREY_900
+            self.update()
+            self.disabled = True
 
 
 class RosbagPlayer():
@@ -91,28 +106,16 @@ class RosbagPlayer():
 
     def createSwitch(self, label, value):
         sw = ft.Switch(label=label, value=value)
-        sw.active_color=color.INDIGO_ACCENT_100
-        sw.track_color=color.GREY_800
-        sw.inactive_thumb_color=color.GREY_600
+        sw.active_color = color.INDIGO_ACCENT_100
+        sw.track_color = color.GREY_800
+        sw.inactive_thumb_color = color.GREY_600
         return sw
-    
+
     def createTextField(self, label=None, value=None, expand=False, width=None):
         tf = ft.TextField(label=label, value=value, expand=expand)
-        tf.width=width
-        tf.border_color=color.GREY_800
+        tf.width = width
+        tf.border_color = color.GREY_800
         return tf
-    
-    def createButton(self, text=None, expand=False, on_click=None):
-        return ft.ElevatedButton(text=text, on_click=on_click, expand=expand, bgcolor=color.INDIGO_ACCENT_400)
-    
-    def enableButton(self, button:ft.ElevatedButton, enable:bool):
-        if enable:
-            button.bgcolor = color.INDIGO_ACCENT_400
-            button.disabled = False
-        else:
-            button.bgcolor = color.GREY_900
-            button.update()
-            button.disabled = True
 
     def createToolButton(self, text=None, expand=False, on_click=None):
         return ft.ElevatedButton(text=text, on_click=on_click, expand=expand, bgcolor=color.GREY_900)
@@ -166,10 +169,11 @@ class RosbagPlayer():
         self.ti_ofs.suffix_text = "s"
         self.ti_ofs.on_submit = self.__ti_ofs_changed
         self.sw_lop = self.createSwitch(label="Loop", value=False)
-        self.bt_play = self.createButton(text="Play", on_click=self.__bt_play_clicked, expand=True)
-        self.bt_paus = self.createButton(text="Pause", on_click=self.__bt_paus_call, expand=True)
-        self.bt_rset = self.createButton(text="Stop", on_click=self.__bt_rset_call, expand=True)
-        row3 = ft.Row(controls=[self.ti_rat, self.ti_ofs, self.sw_lop, self.bt_play, self.bt_paus, self.bt_rset])
+        self.bt_play = PushButton(text="Play", on_click=self.__bt_play_clicked, expand=True, theme_color=color.INDIGO_ACCENT_400)
+        self.bt_paus = PushButton(text="Pause", on_click=self.__bt_paus_call, expand=True, theme_color=color.INDIGO_ACCENT_400)
+        self.bt_rset = PushButton(text="Stop", on_click=self.__bt_rset_call, expand=True, theme_color=color.INDIGO_ACCENT_400)
+        row3 = ft.Row(controls=[self.ti_rat, self.ti_ofs,
+                      self.sw_lop, self.bt_play, self.bt_paus, self.bt_rset])
 
         self.pb_prg = ft.Slider(min=0, max=100, expand=True, on_change=self.__sld_changed, disabled=True)
         self.pb_prg.thumb_color = color.INDIGO_ACCENT_100
@@ -178,9 +182,9 @@ class RosbagPlayer():
         row4 = ft.Row(controls=[self.pb_prg, self.tx_prg])
 
         self.page.add(row1, row2, row5, row3, row4)
-        self.enableButton(self.bt_play, False)
-        self.enableButton(self.bt_paus, False)
-        self.enableButton(self.bt_rset, False)
+        self.bt_play.enable(False)
+        self.bt_paus.enable(False)
+        self.bt_rset.enable(False)
 
         if self.startup_bag:
             self.set_bag(self.startup_bag)
@@ -189,27 +193,27 @@ class RosbagPlayer():
         self.page.update()
 
     def __bt_bag_clicked(self, e):
-        print("__bt_bag_clicked")
+        # print("__bt_bag_clicked")
         self.bag_pick_dialog.pick_files(allowed_extensions=['db3'])
 
     def __bt_pth_clicked(self, e):
-        print("__bt_pth_clicked")
+        # print("__bt_pth_clicked")
         self.path_pick_dialog.pick_files(allowed_extensions=['bash'])
 
     def __bag_picked(self, e: ft.FilePickerResultEvent):
-        print("__bag_picked:", e.files)
+        # print("__bag_picked:", e.files)
         if e.files:
             self.set_bag(e.files[0].path)
             self.page.update()
 
     def __pth_picked(self, e: ft.FilePickerResultEvent):
-        print("__pth_picked:", e.files)
+        # print("__pth_picked:", e.files)
         if e.files:
             self.ti_pth.value = e.files[0].path
             self.ti_pth.update()
 
     def __bt_play_clicked(self, e):
-        print("__bt_play_clicked")
+        # print("__bt_play_clicked")
         bagdir = self.ti_bag.value
         path = self.ti_pth.value
 
@@ -240,9 +244,9 @@ class RosbagPlayer():
         self.timer = threading.Thread(target=self.update_timer, daemon=True)
         self.timer.start()
 
-        self.enableButton(self.bt_play, False)
-        self.enableButton(self.bt_paus, True)
-        self.enableButton(self.bt_rset, True)
+        self.bt_play.enable(False)
+        self.bt_paus.enable(True)
+        self.bt_rset.enable(True)
         self.ti_rat.disabled = True
         self.ti_ofs.disabled = True
         self.sw_lop.disabled = True
@@ -250,7 +254,7 @@ class RosbagPlayer():
         self.page.update()
 
     def __bt_paus_call(self, e):
-        print("__bt_paus_call")
+        # print("__bt_paus_call")
         cmd = 'source ' + DEFAULT_PATH
         cmd += ' && '
         cmd += 'ros2 service call /rosbag2_player/toggle_paused rosbag2_interfaces/srv/TogglePaused'
@@ -265,10 +269,11 @@ class RosbagPlayer():
         self.bt_paus.update()
 
     def __bt_rset_call(self, e):
-        print("__bt_rset_call")
+        # print("__bt_rset_call")
         self.is_running = False
         self.is_paused = False
         os.killpg(self.proc.pid, signal.SIGINT)
+        os.killpg(self.clk_proc.pid, signal.SIGINT)
         while True:
             if self.proc.poll() != None:
                 print("player killed")
@@ -276,7 +281,7 @@ class RosbagPlayer():
         self.reset_player()
 
     def __ti_ofs_changed(self, e):
-        print('__ti_ofs_changed', e.control.value)
+        # print('__ti_ofs_changed', e.control.value)
         dur = self.pb_prg.max
         try:
             int_val = int(e.control.value)
@@ -285,11 +290,11 @@ class RosbagPlayer():
         if int_val > dur:
             int_val = dur
         self.ti_ofs.value = int_val
+        self.ti_ofs.update()
         self.set_progress(int_val)
-        self.page.update()
 
     def __ti_rat_changed(self, e):
-        print('__ti_rat_changed', e.control.value)
+        # print('__ti_rat_changed', e.control.value)
         try:
             flot_val = float(e.control.value)
         except:
@@ -302,7 +307,7 @@ class RosbagPlayer():
     def __sld_changed(self, e):
         if self.is_running:
             return
-        print('__sld_changed', e.control.value)
+        # print('__sld_changed', e.control.value)
         int_val = int(e.control.value)
         self.ti_ofs.value = int_val
         self.tx_prg.value = str(int_val) + " / " + str(self.pb_prg.max) + " s"
@@ -311,44 +316,40 @@ class RosbagPlayer():
     def update_timer(self):
         elapsed = self.offset
 
+        cmd = "source " + DEFAULT_PATH + " && "
+        cmd += "ros2 topic echo /clock --field clock.sec --csv"
+        self.clk_proc = subprocess.Popen(cmd, shell=True, executable='/bin/bash', stdout=subprocess.PIPE, text=True, preexec_fn=os.setsid)
+
+        last_stamp = 0
         while self.is_running:
             if self.is_paused:
                 continue
-
             try:
-                now = int(execCmd("ros2 topic echo /clock --field clock.sec --once --csv", timeout=2).stdout)
+                now = int(self.clk_proc.stdout.readline())
             except ValueError:
                 continue
-            except subprocess.TimeoutExpired:
-                pass
+            if last_stamp != now:
+                elapsed = now - int(self.baginfo["start"])
+                self.set_progress(elapsed)
+                last_stamp = now
 
-            elapsed = now - int(self.baginfo["start"])
-
-            self.set_progress(elapsed)
-            self.page.update()
-
-            if self.proc.poll() == 0:
-                print("player finished")
-                self.is_running = False
-                self.is_paused = False
-                break
-        self.reset_player()
-    
     def reset_player(self):
         print("reset player")
-        self.enableButton(self.bt_play, True)
-        self.enableButton(self.bt_paus, False)
-        self.enableButton(self.bt_rset, False)
+        self.bt_play.enable(True)
+        self.bt_paus.enable(False)
+        self.bt_rset.enable(False)
         self.ti_ofs.disabled = False
         self.ti_rat.disabled = False
         self.sw_lop.disabled = False
-        self.set_progress(self.offset)
         self.page.update()
+        self.set_progress(self.offset)
 
     def set_progress(self, value: int):
-        print("set_progress:", value)
+        # print("set_progress:", value)
         self.tx_prg.value = str(value) + " / " + str(self.pb_prg.max) + " s"
         self.pb_prg.value = value
+        self.tx_prg.update()
+        self.pb_prg.update()
 
     def save_log(self):
         print("save_log:", self.log_file)
@@ -422,13 +423,7 @@ class RosbagPlayer():
     def set_bagdir(self, bagdir: str):
         print('set_bagdir:', bagdir)
         self.ti_bag.value = bagdir
-        is_valid = self.get_baginfo(bagdir)
-        if is_valid:
-            self.bt_play.disabled = False
-            self.pb_prg.disabled = False
-            self.bt_play.bgcolor=color.INDIGO_ACCENT_400
-            self.load_config()
-            self.save_log()
+        self.get_baginfo(bagdir)
 
     def get_baginfo(self, bagdir: str):
         print("get_baginfo:", bagdir)
@@ -443,13 +438,17 @@ class RosbagPlayer():
         if os.path.exists(bagdir):
             if not os.path.exists(bagdir + '/metadata.yaml'):
                 self.ad_ridx_open()
-        
+
             self.lv_tpic.clean()
             for topic in self.baginfo["topics"]:
                 sw = self.createSwitch(label=topic, value=True)
                 self.lv_tpic.controls.append(sw)
 
-        return is_valid
+        if is_valid:
+            self.bt_play.enable(True)
+            self.pb_prg.disabled = False
+            self.load_config()
+            self.save_log()
 
     def ad_ridx_open(self):
         print("ad_ridx_open")
@@ -457,7 +456,7 @@ class RosbagPlayer():
         self.ad_ridx.open = True
         self.page.update()
 
-    def ad_ridx_close(self, e:ft.ControlEvent):
+    def ad_ridx_close(self, e: ft.ControlEvent):
         print("ad_ridx_close", e.control.text)
         self.ad_ridx.open = False
         if e.control.text == "Yes":
@@ -465,7 +464,7 @@ class RosbagPlayer():
             reindexBag(bagdir)
             self.get_baginfo(bagdir)
         self.page.update()
-        
+
     def get_filtered_topics(self):
         print("get_filtered_topics")
         enabled_topics = []
