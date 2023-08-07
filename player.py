@@ -69,8 +69,8 @@ def getRosbagInfo(bagdir:str):
         return False, baginfo
 
 
-def reindexBag(bagdir:str, path:str):
-    cmd = 'source ' + path
+def reindexBag(bagdir:str):
+    cmd = 'source ' + DEFAULT_PATH
     cmd += ' && '
     cmd += 'ros2 bag reindex ' + bagdir
     resp = execCmd(cmd)
@@ -130,6 +130,17 @@ class RosbagPlayer():
         self.path_pick_dialog = ft.FilePicker(on_result=self.__pth_picked)
         self.page.overlay.append(self.bag_pick_dialog)
         self.page.overlay.append(self.path_pick_dialog)
+
+        self.ad_ridx = ft.AlertDialog(
+            modal=True,
+            title=ft.Text("ros2 bag reindex"),
+            content=ft.Text("metadata.yaml is not found!\nAre you wants to ros2 bag reindex?"),
+            actions=[
+                ft.TextButton("Yes", on_click=self.ad_ridx_close),
+                ft.TextButton("No", on_click=self.ad_ridx_close),
+            ],
+            actions_alignment=ft.MainAxisAlignment.END,
+        )
 
         self.ti_bag = self.createTextField(label="Rosbag", expand=True)
         self.ti_pth = self.createTextField(label="Path", value=DEFAULT_PATH, expand=True)
@@ -429,25 +440,32 @@ class RosbagPlayer():
         self.pb_prg.max = int(self.baginfo["duration"])
         self.set_progress(0)
 
-        # if not os.path.exists(bagdir + '/metadata.yaml'):
-        #     resp = QMessageBox.critical(self, "Error", "Rosbag is broken! \nAre you wants to reindex?",
-        #                                 QMessageBox.StandardButton.Ok | QMessageBox.StandardButton.Cancel, QMessageBox.StandardButton.Cancel)
-        #     print(resp)
-        #     if resp == QMessageBox.StandardButton.Ok:
-        #         reindexBag(bagdir, path)
-        #         self.get_baginfo()
-        #     else:
-        #         print("cancel")
-
-        # self.filter_ui.topic_list.clear()
-
-        self.lv_tpic.clean()
-        for topic in self.baginfo["topics"]:
-            sw = self.createSwitch(label=topic, value=True)
-            self.lv_tpic.controls.append(sw)
+        if os.path.exists(bagdir):
+            if not os.path.exists(bagdir + '/metadata.yaml'):
+                self.ad_ridx_open()
+        
+            self.lv_tpic.clean()
+            for topic in self.baginfo["topics"]:
+                sw = self.createSwitch(label=topic, value=True)
+                self.lv_tpic.controls.append(sw)
 
         return is_valid
 
+    def ad_ridx_open(self):
+        print("ad_ridx_open")
+        self.page.dialog = self.ad_ridx
+        self.ad_ridx.open = True
+        self.page.update()
+
+    def ad_ridx_close(self, e:ft.ControlEvent):
+        print("ad_ridx_close", e.control.text)
+        self.ad_ridx.open = False
+        if e.control.text == "Yes":
+            bagdir = self.ti_bag.value
+            reindexBag(bagdir)
+            self.get_baginfo(bagdir)
+        self.page.update()
+        
     def get_filtered_topics(self):
         print("get_filtered_topics")
         enabled_topics = []
