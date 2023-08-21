@@ -2,215 +2,399 @@
 
 import os
 import sys
-import yaml
-import time
 import re
 import subprocess
 import signal
+import threading
 
-from PyQt5 import QtCore, uic, QtWidgets, QtGui
-from PyQt5.QtWidgets import QApplication, QFileDialog, QMessageBox, QListWidgetItem
-from PyQt5.QtGui import QTextCursor
+import yaml
+import flet as ft
+import flet_core.colors as color
 
 
-DEFAULT_PATH = "/opt/ros/humble/setup.bash"
+ROS_DISTRO = "humble"
+DEFAULT_PATH = "/opt/ros/" + ROS_DISTRO + "/setup.bash"
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 
 
-def execCmd(cmd):
-    print("[INFO] execCmd():", cmd)
-    return subprocess.run(cmd, shell=True, executable='/bin/bash', capture_output=True, text=True)
+def execCmd(cmd, timeout=None):
+    print(cmd)
+    return subprocess.run(cmd, shell=True, executable='/bin/bash', capture_output=True, text=True, timeout=timeout)
 
 
-def getRosbagInfo(bagdir:str, path:str):
-    cmd = 'source ' + path
+def getRosbagInfo(bagdir: str):
+    cmd = 'source ' + DEFAULT_PATH
     cmd += ' && '
     cmd += 'ros2 bag info ' + bagdir
-
     resp = execCmd(cmd)
 
+    baginfo = {}
     if resp.stdout != '':
-        info = ''
-        dur = 0
+        desc = ""
         topics = []
         lines = resp.stdout.split('\n')
 
         for line in lines:
             if line == '':
                 continue
-            info += line + '\n'
 
             if 'Duration:' in line:
-                dur = int(re.split('[:.]', line)[1])
+                dur = float(re.split(r'[:s]', line)[1])
+
+            if "Start" in line:
+                start = float(re.split(r'[()]', line)[1])
+
+            if "End" in line:
+                end = float(re.split(r'[()]', line)[1])
 
             if 'Topic:' in line:
                 topics.append(re.split(r'Topic: | \|', line)[1])
+                continue
 
-        return True, info, dur, topics
+            desc += line + '\n'
 
+        baginfo["desc"] = desc
+        baginfo["start"] = start
+        baginfo["end"] = end
+        baginfo["duration"] = dur
+        baginfo["topics"] = topics
+        return True, baginfo
     else:
-        return False, resp.stderr, 0, []
+        baginfo["desc"] = resp.stderr
+        baginfo["start"] = 0
+        baginfo["end"] = 0
+        baginfo["duration"] = 0
+        baginfo["topics"] = []
+        return False, baginfo
 
 
-def reindexBag(bagdir:str, path:str):
-    cmd = 'source ' + path
+def reindexBag(bagdir: str):
+    cmd = 'source ' + DEFAULT_PATH
     cmd += ' && '
     cmd += 'ros2 bag reindex ' + bagdir
-
     resp = execCmd(cmd)
 
 
-class RosbagPlayer(QtCore.QThread):
+class PushButton(ft.ElevatedButton):
+    def __init__(self, text: str | None = None, expand: bool | int | None = None, on_click=None, theme_color: str = None):
+        super().__init__(text=text, expand=expand, on_click=on_click, bgcolor=theme_color)
+        self.theme_color = theme_color
 
-    playerProglessTick = QtCore.pyqtSignal(int)
-    playerFinished = QtCore.pyqtSignal()
+    def enable(self, state=True):
+        if state:
+            self.bgcolor = self.theme_color
+            self.update()
+            self.disabled = False
+        else:
+            self.bgcolor = color.GREY_900
+            self.update()
+            self.disabled = True
+
+
+class RosbagPlayer():
 
     def __init__(self):
-        super().__init__(None)
-
-        self.is_running = False
-        self.path = ''
-        self.rosbag_dir = ''
+        self.home_dir = os.getenv('HOME')
+        self.log_file = SCRIPT_DIR + "/player.log"
+        self.startup_bag = ""
+        self.paths = [DEFAULT_PATH]
         self.rate = 1.0
         self.offset = 0
-        self.elapsed = 0
         self.loop = False
-        self.topics = []
+        self.is_running = False
+        self.is_paused = False
+        self.baginfo = None
 
-    def setRosbag(self, rosbag_dir: str):
-        self.rosbag_dir = rosbag_dir
+    def createSwitch(self, label, value):
+        sw = ft.Switch(label=label, value=value)
+        sw.active_color = color.INDIGO_ACCENT_100
+        sw.track_color = color.GREY_800
+        sw.inactive_thumb_color = color.GREY_600
+        return sw
 
-    def setSource(self, path: str):
-        self.path = path
+    def createTextField(self, label=None, value=None, expand=False, width=None):
+        tf = ft.TextField(label=label, value=value, expand=expand)
+        tf.width = width
+        tf.border_color = color.GREY_800
+        return tf
 
-    def setRate(self, rate):
-        self.rate = rate
+    def createToolButton(self, text=None, expand=False, on_click=None):
+        return ft.ElevatedButton(text=text, on_click=on_click, expand=expand, bgcolor=color.GREY_900)
 
-    def setStartOffset(self, offset):
-        self.offset = offset
+    def make_page(self, page: ft.Page):
+        self.page = page
+        self.page.theme = ft.Theme(color_scheme_seed="indigo")
+        self.page.theme_mode = ft.ThemeMode.DARK
+        # self.page.bgcolor = color.BLACK
+        self.page.title = "Rosbag2 Player - " + ROS_DISTRO
+        self.page.window_width = 1000
+        self.page.window_height = 800
 
-    def setLoop(self, loop):
-        self.loop = loop
+        self.bag_pick_dialog = ft.FilePicker(on_result=self.__bag_picked)
+        self.path_pick_dialog = ft.FilePicker(on_result=self.__pth_picked)
+        self.page.overlay.append(self.bag_pick_dialog)
+        self.page.overlay.append(self.path_pick_dialog)
 
-    def setPubTopics(self, topics):
-        self.topics = topics
+        self.ad_ridx = ft.AlertDialog(
+            modal=True,
+            title=ft.Text("ros2 bag reindex"),
+            content=ft.Text("metadata.yaml is not found!\nAre you wants to ros2 bag reindex?"),
+            actions=[
+                ft.TextButton("Yes", on_click=self.ad_ridx_close),
+                ft.TextButton("No", on_click=self.ad_ridx_close),
+            ],
+            actions_alignment=ft.MainAxisAlignment.END,
+        )
 
-    def run(self):
-        cmd = 'source ' + self.path
+        self.ti_bag = self.createTextField(label="Rosbag", expand=True)
+        self.dd_path = ft.Dropdown(label="Path", border_color = color.GREY_800, expand=True)
+        self.bt_bag = self.createToolButton(text="...", on_click=self.__bt_bag_clicked)
+        self.bt_pth = self.createToolButton(text="...", on_click=self.__bt_pth_clicked)
+        row1 = ft.Row(controls=[self.ti_bag, self.bt_bag])
+        row2 = ft.Row(controls=[self.dd_path, self.bt_pth])
+
+        self.tx_info = self.createTextField(label="Information", value="init", expand=True)
+        self.tx_info.color = color.GREY
+        self.tx_info.read_only = True
+        self.tx_info.multiline = True
+        self.tx_info.min_lines = 30
+        self.tx_info.text_size = 14
+        self.tx_info.text_style = ft.TextStyle(font_family="Ubuntu Mono")
+        self.lv_tpic = ft.ListView(expand=True)
+        row5 = ft.Row(controls=[self.tx_info, self.lv_tpic], expand=True, vertical_alignment=ft.CrossAxisAlignment.STRETCH)
+
+        self.ti_rat = self.createTextField(label="Rate", value=1.0, width=100)
+        self.ti_rat.suffix_text = "x"
+        self.ti_rat.on_submit = self.__ti_rat_changed
+        self.ti_ofs = self.createTextField(label="Start Offset", value=0, width=100)
+        self.ti_ofs.suffix_text = "s"
+        self.ti_ofs.on_submit = self.__ti_ofs_changed
+        self.sw_lop = self.createSwitch(label="Loop", value=False)
+        self.bt_play = PushButton(text="Play", on_click=self.__bt_play_clicked, expand=True, theme_color=color.INDIGO_ACCENT_400)
+        self.bt_paus = PushButton(text="Pause", on_click=self.__bt_paus_call, expand=True, theme_color=color.INDIGO_ACCENT_400)
+        self.bt_rset = PushButton(text="Stop", on_click=self.__bt_rset_call, expand=True, theme_color=color.INDIGO_ACCENT_400)
+        row3 = ft.Row(controls=[self.ti_rat, self.ti_ofs,
+                      self.sw_lop, self.bt_play, self.bt_paus, self.bt_rset])
+
+        self.pb_prg = ft.Slider(min=0, max=100, expand=True, on_change=self.__sld_changed, disabled=True)
+        self.pb_prg.thumb_color = color.INDIGO_ACCENT_100
+        self.pb_prg.active_color = color.INDIGO_ACCENT_100
+        self.tx_prg = ft.Text(value="-- / -- s")
+        row4 = ft.Row(controls=[self.pb_prg, self.tx_prg])
+
+        self.page.add(row1, row2, row5, row3, row4)
+        self.bt_play.enable(False)
+        self.bt_paus.enable(False)
+        self.bt_rset.enable(False)
+
+        self.load_log()
+        if self.startup_bag:
+            self.set_bag(self.startup_bag)
+        self.page.update()
+
+    def __bt_bag_clicked(self, e):
+        # print("__bt_bag_clicked")
+        self.bag_pick_dialog.pick_files(allowed_extensions=['db3'])
+
+    def __bt_pth_clicked(self, e):
+        # print("__bt_pth_clicked")
+        self.path_pick_dialog.pick_files(allowed_extensions=['bash'])
+
+    def __bag_picked(self, e: ft.FilePickerResultEvent):
+        # print("__bag_picked:", e.files)
+        if e.files:
+            self.set_bag(e.files[0].path)
+            self.page.update()
+
+    def __pth_picked(self, e: ft.FilePickerResultEvent):
+        # print("__pth_picked:", e.files)
+        if e.files:
+            path = e.files[0].path
+            self.paths.append(path)
+            self.dd_path.options.append(ft.dropdown.Option(path))
+            self.dd_path.value = path
+            self.page.update()
+            self.save_log()
+
+    def __bt_play_clicked(self, e):
+        # print("__bt_play_clicked")
+        bagdir = self.ti_bag.value
+        path = self.dd_path.value
+
+        self.rate = self.ti_rat.value
+        self.offset = self.ti_ofs.value
+        self.loop = self.sw_lop.value
+
+        filtered_topics = self.get_filtered_topics()
+
+        cmd = 'source ' + path
         cmd += ' && '
-        cmd += 'ros2 bag play ' + self.rosbag_dir
+        cmd += 'ros2 bag play ' + bagdir
         cmd += ' --clock 200'
         if self.rate != 1.0:
             cmd += ' --rate ' + str(self.rate)
         if self.offset != 0:
             cmd += ' --start-offset ' + str(self.offset)
-            self.elapsed = self.offset
         if self.loop:
             cmd += ' --loop'
-        if self.topics:
-            cmd += ' --topics ' + str.join(' ', self.topics)
+        if filtered_topics:
+            cmd += ' --topics ' + str.join(' ', filtered_topics)
 
-        print("[INFO] RosbagPlayer.run():", cmd)
-
-        self.proc = subprocess.Popen(
-            cmd, shell=True, executable='/bin/bash', preexec_fn=os.setsid)
+        print(cmd)
+        self.proc = subprocess.Popen(cmd, shell=True, executable='/bin/bash', preexec_fn=os.setsid)
         self.is_running = True
+        self.is_paused = False
 
-        timer_tick = 1.0 / self.rate
+        self.timer = threading.Thread(target=self.update_timer, daemon=True)
+        self.timer.start()
 
-        while True:
-            if not self.is_running:
-                continue
+        self.bt_play.enable(False)
+        self.bt_paus.enable(True)
+        self.bt_rset.enable(True)
+        self.ti_rat.disabled = True
+        self.ti_ofs.disabled = True
+        self.sw_lop.disabled = True
+        self.save_config()
+        self.page.update()
 
-            if self.proc.poll() != None:
-                self.playerFinished.emit()
-                print("[INFO] RosbagPlayer Finished")
-                break
-
-            self.playerProglessTick.emit(self.elapsed)
-            time.sleep(timer_tick)
-            self.elapsed += 1
-
-    def pause(self):
-        cmd = 'source ' + self.path
+    def __bt_paus_call(self, e):
+        # print("__bt_paus_call")
+        cmd = 'source ' + DEFAULT_PATH
         cmd += ' && '
         cmd += 'ros2 service call /rosbag2_player/toggle_paused rosbag2_interfaces/srv/TogglePaused'
-        print("[INFO] RosbagPlayer.pause():", cmd)
+        execCmd(cmd)
 
-        _ = subprocess.run(
-            cmd, shell=True, executable='/bin/bash', capture_output=True, text=True)
-
-        if self.is_running:
-            self.is_running = False
+        if self.is_paused:
+            self.is_paused = False
+            self.bt_paus.text = "Pause"
         else:
-            self.is_running = True
+            self.is_paused = True
+            self.bt_paus.text = "Resume"
+        self.bt_paus.update()
 
-    def stop(self):
-        print("[INFO] RosbagPlayer.stop()")
-
-        os.killpg(self.proc.pid, signal.SIGINT)
+    def __bt_rset_call(self, e):
+        # print("__bt_rset_call")
         self.is_running = False
-        self.playerFinished.emit()
+        self.is_paused = False
+        os.killpg(self.proc.pid, signal.SIGINT)
+        os.killpg(self.clk_proc.pid, signal.SIGINT)
+        while True:
+            if self.proc.poll() != None:
+                print("player killed")
+                break
+        self.reset_player()
 
+    def __ti_ofs_changed(self, e):
+        # print('__ti_ofs_changed', e.control.value)
+        dur = self.pb_prg.max
+        try:
+            int_val = int(e.control.value)
+        except:
+            int_val = 0
+        if int_val > dur:
+            int_val = dur
+        self.ti_ofs.value = int_val
+        self.ti_ofs.update()
+        self.set_progress(int_val)
 
-class PlayerWindow(QtWidgets.QWidget):
+    def __ti_rat_changed(self, e):
+        # print('__ti_rat_changed', e.control.value)
+        try:
+            flot_val = float(e.control.value)
+        except:
+            flot_val = 0
+        if flot_val < 0.01:
+            flot_val = 0.01
+        self.ti_rat.value = flot_val
+        self.ti_rat.update()
 
-    def __init__(self):
-        super().__init__()
-        uic.loadUi(SCRIPT_DIR + "/ui/player.ui", self)
+    def __sld_changed(self, e):
+        if self.is_running:
+            return
+        # print('__sld_changed', e.control.value)
+        int_val = int(e.control.value)
+        self.ti_ofs.value = int_val
+        self.tx_prg.value = str(int_val) + " / " + str(self.pb_prg.max) + " s"
+        self.page.update()
 
-        self.filter_ui = uic.loadUi(SCRIPT_DIR + "/ui/filter.ui")
+    def update_timer(self):
+        elapsed = self.offset
 
-        self.home_dir = os.getenv('HOME')
-        self.player = None
-        self.log_file = SCRIPT_DIR + "/player.log"
+        cmd = "source " + DEFAULT_PATH + " && "
+        cmd += "ros2 topic echo /clock --field clock.sec --csv"
+        self.clk_proc = subprocess.Popen(cmd, shell=True, executable='/bin/bash', stdout=subprocess.PIPE, text=True, preexec_fn=os.setsid)
 
-        self.pb_bag.clicked.connect(self.__pb_bag_call)
-        self.pb_path.clicked.connect(self.__pb_path_call)
-        self.pb_play.clicked.connect(self.__pb_play_call)
-        self.pb_pause.clicked.connect(self.__pb_pause_call)
-        self.pb_reset.clicked.connect(self.__pb_reset_call)
-        self.pb_filter.clicked.connect(self.__pb_filter_call)
-        self.sb_offset.valueChanged.connect(self.__sb_offset_call)
-        self.sb_rate.valueChanged.connect(self.__sb_rate_call)
-        self.le_path.setText(DEFAULT_PATH)
+        last_stamp = 0
+        while self.is_running:
+            if self.is_paused:
+                continue
+            try:
+                now = int(self.clk_proc.stdout.readline())
+            except ValueError:
+                continue
+            if last_stamp != now:
+                elapsed = now - int(self.baginfo["start"])
+                self.set_progress(elapsed)
+                last_stamp = now
 
-        self.load_log()
-        bagdir = self.le_bag.text()
-        if bagdir != "":
-            self.bag_info()
-            self.load_config()
+    def reset_player(self):
+        print("reset player")
+        self.bt_play.enable(True)
+        self.bt_paus.enable(False)
+        self.bt_rset.enable(False)
+        self.ti_ofs.disabled = False
+        self.ti_rat.disabled = False
+        self.sw_lop.disabled = False
+        self.page.update()
+        self.set_progress(self.offset)
+
+    def set_progress(self, value: int):
+        # print("set_progress:", value)
+        self.tx_prg.value = str(value) + " / " + str(self.pb_prg.max) + " s"
+        self.pb_prg.value = value
+        self.tx_prg.update()
+        self.pb_prg.update()
 
     def save_log(self):
-        bagdir = self.le_bag.text()
-        log = {'bagdir': bagdir}
+        print("save_log:", self.log_file)
+        bagdir = self.ti_bag.value
+        log = {
+            'bagdir': bagdir,
+            "paths": self.paths
+        }
         with open(self.log_file, 'w') as f:
             yaml.dump(log, f)
 
     def load_log(self):
+        print("load_log:", self.log_file)
+
+        bagdir = ''
         if os.path.exists(self.log_file):
             with open(self.log_file, 'r') as f:
                 log = yaml.safe_load(f)
                 bagdir = log['bagdir']
-            self.le_bag.setText(bagdir)
+                self.paths = log['paths']
+            self.ti_bag.value = bagdir
+            for path in self.paths:
+                self.dd_path.options.append(ft.dropdown.Option(path))
+                self.dd_path.value = path
         else:
             self.save_log()
 
+        if bagdir != "":
+            self.set_bagdir(bagdir)
+
     def save_config(self):
-        bagdir = self.le_bag.text()
+        bagdir = self.ti_bag.value
         config_file = bagdir + "/player.conf"
-        path = self.le_path.text()
-        start = self.sb_offset.value()
-        rate = self.sb_rate.value()
-        filtered_topics = self.__get_filtered_topics()
-        loop = int(self.chb_loop.checkState())
+        print("save_config:", config_file)
 
         config = {
-            'path': path,
-            'start': start,
-            'rate': rate,
-            'filtered_topics': filtered_topics,
-            'loop': loop,
+            'path': self.dd_path.value,
+            'start': self.offset,
+            'rate': self.rate,
+            'enabled_topics': self.get_filtered_topics(),
+            'loop': self.loop,
         }
 
         if os.path.exists(bagdir):
@@ -218,196 +402,110 @@ class PlayerWindow(QtWidgets.QWidget):
                 yaml.dump(config, f)
 
     def load_config(self):
-        bagdir = self.le_bag.text()
+        bagdir = self.ti_bag.value
         config_file = bagdir + "/player.conf"
+        print("load_config:", config_file)
 
-        if os.path.exists(config_file):
+        try:
             with open(config_file, 'r') as f:
                 config = yaml.safe_load(f)
                 path = config['path']
                 start = config['start']
                 rate = config['rate']
-                filtered_topics = config['filtered_topics']
+                topics = config['enabled_topics']
                 loop = config['loop']
 
-            self.__set_filtered_topics(filtered_topics)
-            self.le_path.setText(path)
-            self.sb_offset.setValue(start)
-            self.sb_rate.setValue(rate)
-            self.chb_loop.setCheckState(loop)
-        else:
-            self.save_config()
+            self.dd_path.value = path
+            self.set_progress(start)
+            self.ti_ofs.value = start
+            self.ti_rat.value = rate
+            self.sw_lop.value = loop
+            self.set_filtered_topics(topics)
+        except:
+            self.dd_path.value = DEFAULT_PATH
+            self.set_progress(0)
+            self.ti_ofs.value = 0
+            self.ti_rat.value = 1.0
+            self.sw_lop.value = False
+            self.set_filtered_topics(self.baginfo["topics"])
 
-    def __pb_bag_call(self):
-        bag = QFileDialog.getOpenFileName(
-            self, 'Choose Rosbag2 File', self.home_dir, 'SQLite3 database File (*.db3)')[0]
-        if bag == '':
-            return
-        self.set_rosbag(bag)
+    def set_bag(self, bag: str):
+        print('set_bag:', bag)
+        self.set_bagdir(os.path.dirname(bag))
 
-    def __pb_path_call(self):
-        path = QFileDialog.getOpenFileName(
-            self, 'Choose path file', self.home_dir, 'Bash File (setup.bash)')[0]
-        if path == '':
-            return
-        self.le_path.setText(path)
-        self.bag_info()
-        self.save_config()
+    def set_bagdir(self, bagdir: str):
+        print('set_bagdir:', bagdir)
+        self.ti_bag.value = bagdir
+        self.get_baginfo(bagdir)
 
-    def __sb_rate_call(self, value):
-        print('[INFO] set rate:', value)
+    def get_baginfo(self, bagdir: str):
+        print("get_baginfo:", bagdir)
+        is_valid, self.baginfo = getRosbagInfo(bagdir)
 
-    def __sb_offset_call(self, value):
-        self.set_progress_offset(value)
-        print('[INFO] set start offset:', value)
+        print(self.baginfo)
 
-    def set_rosbag(self, bag: str):
-        bagdir = os.path.dirname(bag)
-        self.le_bag.setText(bagdir)
-        self.bag_info()
-        self.load_config()
-        self.save_log()
-        print('[INFO] set rosbag dir:', bagdir)
+        self.tx_info.value = self.baginfo["desc"]
+        self.pb_prg.max = int(self.baginfo["duration"])
+        self.set_progress(0)
 
-    def bag_info(self):
-        bagdir = self.le_bag.text()
-        path = self.le_path.text()
-        isValid, info, duration, topics = getRosbagInfo(bagdir, path)
+        if os.path.exists(bagdir):
+            if not os.path.exists(bagdir + '/metadata.yaml'):
+                self.ad_ridx_open()
 
-        self.pb_play.setEnabled(isValid)
+            self.lv_tpic.clean()
+            for topic in self.baginfo["topics"]:
+                sw = self.createSwitch(label=topic, value=True)
+                self.lv_tpic.controls.append(sw)
 
-        self.pte_bag.clear()
-        self.pte_bag.setPlainText(info)
-        self.pte_bag.setTextCursor(QTextCursor(
-            self.pte_bag.document().findBlockByLineNumber(0)))
-        self.progress.setRange(0, duration)
-        self.sb_offset.setRange(0, duration)
+        if is_valid:
+            self.bt_play.enable(True)
+            self.pb_prg.disabled = False
+            self.load_config()
+            self.save_log()
 
-        if not os.path.exists(bagdir):
-            return
+    def ad_ridx_open(self):
+        print("ad_ridx_open")
+        self.page.dialog = self.ad_ridx
+        self.ad_ridx.open = True
+        self.page.update()
 
-        if not os.path.exists(bagdir + '/metadata.yaml'):
-            resp = QMessageBox.critical(self, "Error", "Rosbag is broken! \nAre you wants to reindex?",
-                                        QMessageBox.StandardButton.Ok | QMessageBox.StandardButton.Cancel, QMessageBox.StandardButton.Cancel)
-            print(resp)
-            if resp == QMessageBox.StandardButton.Ok:
-                reindexBag(bagdir, path)
-                self.bag_info()
-            else:
-                print("cancel")
+    def ad_ridx_close(self, e: ft.ControlEvent):
+        print("ad_ridx_close", e.control.text)
+        self.ad_ridx.open = False
+        if e.control.text == "Yes":
+            bagdir = self.ti_bag.value
+            reindexBag(bagdir)
+            self.get_baginfo(bagdir)
+        self.page.update()
 
-        self.filter_ui.topic_list.clear()
+    def get_filtered_topics(self):
+        print("get_filtered_topics")
+        enabled_topics = []
+        for control in self.lv_tpic.controls:
+            if control.value:
+                enabled_topics.append(control.label)
+        return enabled_topics
 
-        for topic in topics:
-            item = QListWidgetItem(topic)
-            item.setCheckState(QtCore.Qt.CheckState.Checked)
-            self.filter_ui.topic_list.addItem(item)
-
-    def __pb_filter_call(self):
-        self.filter_ui.show()
-
-    def __get_filtered_topics(self):
-        checked_topics = []
-        unchecked_cnt = 0
-        for i in range(self.filter_ui.topic_list.count()):
-            item = self.filter_ui.topic_list.item(i)
-            if item.checkState() == QtCore.Qt.CheckState.Checked:
-                checked_topics.append(item.text())
-            else:
-                unchecked_cnt += 1
-
-        if unchecked_cnt == 0:
-            return []
-        else:
-            return checked_topics
-
-    def __set_filtered_topics(self, enabled_topics):
+    def set_filtered_topics(self, enabled_topics):
+        print("set_filtered_topics:", enabled_topics)
         if not enabled_topics:
             return
-        for i in range(self.filter_ui.topic_list.count()):
-            item = self.filter_ui.topic_list.item(i)
-            if item.text() not in enabled_topics:
-                item.setCheckState(QtCore.Qt.CheckState.Unchecked)
-
-    def __pb_play_call(self):
-        bagdir = self.le_bag.text()
-        path = self.le_path.text()
-        rate = self.sb_rate.value()
-        offset = self.sb_offset.value()
-
-        if self.chb_loop.checkState() == QtCore.Qt.CheckState.Checked:
-            loop = True
-        else:
-            loop = False
-
-        filterd_topics = self.__get_filtered_topics()
-
-        self.player = RosbagPlayer()
-        self.player.playerProglessTick.connect(self.set_progress_offset)
-        self.player.playerFinished.connect(self.__finished_call)
-        self.player.setRosbag(bagdir)
-        self.player.setSource(path)
-        self.player.setRate(rate)
-        self.player.setStartOffset(offset)
-        self.player.setLoop(loop)
-        self.player.setPubTopics(filterd_topics)
-        self.player.start()
-
-        self.pb_play.setEnabled(False)
-        self.sb_rate.setEnabled(False)
-        self.sb_offset.setEnabled(False)
-        self.chb_loop.setEnabled(False)
-        self.pb_reset.setEnabled(True)
-        self.pb_pause.setEnabled(True)
-        self.save_config()
-        self.save_log()
-
-    def __pb_pause_call(self):
-        self.player.pause()
-        if self.player.is_running:
-            self.pb_pause.setText('Pause')
-        else:
-            self.pb_pause.setText('Resume')
-
-    def __pb_reset_call(self):
-        self.player.stop()
-
-    def __finished_call(self):
-        start = self.sb_offset.value()
-        self.progress.setValue(start)
-        self.pb_play.setEnabled(True)
-        self.sb_rate.setEnabled(True)
-        self.sb_offset.setEnabled(True)
-        self.chb_loop.setEnabled(True)
-        self.pb_reset.setEnabled(False)
-        self.pb_pause.setEnabled(False)
-        self.pb_pause.setText('Pause')
-        time.sleep(1)
-        self.player = None
-
-    def set_progress_offset(self, value):
-        self.progress.setValue(value)
+        for control in self.lv_tpic.controls:
+            if control.label in enabled_topics:
+                control.value = True
+            else:
+                control.value = False
 
 
 if __name__ == '__main__':
+    player = RosbagPlayer()
 
     rosbag = ''
     try:
         rosbag = sys.argv[1]
-        print("[INFO] app start with rosbag", rosbag)
+        player.startup_bag = rosbag
+        print("app start with rosbag", rosbag)
     except:
-        print("[INFO] app start")
+        print("app start")
 
-    app = QApplication(sys.argv)
-    with open(SCRIPT_DIR + '/ui/stylesheet.css', 'r') as f:
-        style = f.read()
-        app.setStyleSheet(style)
-
-    ui_player = PlayerWindow()
-    ui_player.setWindowIcon(QtGui.QIcon(SCRIPT_DIR + '/img/rosbag_player.png'))
-    ui_player.show()
-
-    if rosbag != '':
-        ui_player.set_rosbag(rosbag)
-
-    sys.exit(app.exec())
+    ft.app(target=player.make_page)
