@@ -97,6 +97,7 @@ class RosbagPlayer():
         self.home_dir = os.getenv('HOME')
         self.log_file = SCRIPT_DIR + "/player.log"
         self.startup_bag = ""
+        self.paths = [DEFAULT_PATH]
         self.rate = 1.0
         self.offset = 0
         self.loop = False
@@ -146,11 +147,11 @@ class RosbagPlayer():
         )
 
         self.ti_bag = self.createTextField(label="Rosbag", expand=True)
-        self.ti_pth = self.createTextField(label="Path", value=DEFAULT_PATH, expand=True)
+        self.dd_path = ft.Dropdown(label="Path", border_color = color.GREY_800, expand=True)
         self.bt_bag = self.createToolButton(text="...", on_click=self.__bt_bag_clicked)
         self.bt_pth = self.createToolButton(text="...", on_click=self.__bt_pth_clicked)
         row1 = ft.Row(controls=[self.ti_bag, self.bt_bag])
-        row2 = ft.Row(controls=[self.ti_pth, self.bt_pth])
+        row2 = ft.Row(controls=[self.dd_path, self.bt_pth])
 
         self.tx_info = self.createTextField(label="Information", value="init", expand=True)
         self.tx_info.color = color.GREY
@@ -186,10 +187,9 @@ class RosbagPlayer():
         self.bt_paus.enable(False)
         self.bt_rset.enable(False)
 
+        self.load_log()
         if self.startup_bag:
             self.set_bag(self.startup_bag)
-        else:
-            self.load_log()
         self.page.update()
 
     def __bt_bag_clicked(self, e):
@@ -209,13 +209,17 @@ class RosbagPlayer():
     def __pth_picked(self, e: ft.FilePickerResultEvent):
         # print("__pth_picked:", e.files)
         if e.files:
-            self.ti_pth.value = e.files[0].path
-            self.ti_pth.update()
+            path = e.files[0].path
+            self.paths.append(path)
+            self.dd_path.options.append(ft.dropdown.Option(path))
+            self.dd_path.value = path
+            self.page.update()
+            self.save_log()
 
     def __bt_play_clicked(self, e):
         # print("__bt_play_clicked")
         bagdir = self.ti_bag.value
-        path = self.ti_pth.value
+        path = self.dd_path.value
 
         self.rate = self.ti_rat.value
         self.offset = self.ti_ofs.value
@@ -354,17 +358,26 @@ class RosbagPlayer():
     def save_log(self):
         print("save_log:", self.log_file)
         bagdir = self.ti_bag.value
-        log = {'bagdir': bagdir}
+        log = {
+            'bagdir': bagdir,
+            "paths": self.paths
+        }
         with open(self.log_file, 'w') as f:
             yaml.dump(log, f)
 
     def load_log(self):
         print("load_log:", self.log_file)
+
+        bagdir = ''
         if os.path.exists(self.log_file):
             with open(self.log_file, 'r') as f:
                 log = yaml.safe_load(f)
                 bagdir = log['bagdir']
+                self.paths = log['paths']
             self.ti_bag.value = bagdir
+            for path in self.paths:
+                self.dd_path.options.append(ft.dropdown.Option(path))
+                self.dd_path.value = path
         else:
             self.save_log()
 
@@ -377,7 +390,7 @@ class RosbagPlayer():
         print("save_config:", config_file)
 
         config = {
-            'path': self.ti_pth.value,
+            'path': self.dd_path.value,
             'start': self.offset,
             'rate': self.rate,
             'enabled_topics': self.get_filtered_topics(),
@@ -402,14 +415,14 @@ class RosbagPlayer():
                 topics = config['enabled_topics']
                 loop = config['loop']
 
-            self.ti_pth.value = path
+            self.dd_path.value = path
             self.set_progress(start)
             self.ti_ofs.value = start
             self.ti_rat.value = rate
             self.sw_lop.value = loop
             self.set_filtered_topics(topics)
         except:
-            self.ti_pth.value = DEFAULT_PATH
+            self.dd_path.value = DEFAULT_PATH
             self.set_progress(0)
             self.ti_ofs.value = 0
             self.ti_rat.value = 1.0
