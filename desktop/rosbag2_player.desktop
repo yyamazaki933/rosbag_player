@@ -1,9 +1,0 @@
-[Desktop Entry]
-
-Type=Application
-Version=1.0
-Name=Rosbag2 Player
-Exec=bash PATH/launch.sh %f
-Icon=rosbag2_player
-MimeType=application/vnd.sqlite3;
-Terminal=true

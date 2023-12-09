@@ -6,13 +6,14 @@ import re
 import subprocess
 import signal
 import threading
+import json
 
 import yaml
 import flet as ft
 import flet_core.colors as color
 
 
-ROS_DISTRO = "humble"
+ROS_DISTRO = "noetic"
 DEFAULT_PATH = "/opt/ros/" + ROS_DISTRO + "/setup.bash"
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 
@@ -22,10 +23,10 @@ def execCmd(cmd, timeout=None):
     return subprocess.run(cmd, shell=True, executable='/bin/bash', capture_output=True, text=True, timeout=timeout)
 
 
-def getRosbagInfo(bagdir: str):
+def getRosbagInfo(bag: str):
     cmd = 'source ' + DEFAULT_PATH
     cmd += ' && '
-    cmd += 'ros2 bag info ' + bagdir
+    cmd += 'rosbag info ' + bag
     resp = execCmd(cmd)
 
     baginfo = {}
@@ -34,21 +35,29 @@ def getRosbagInfo(bagdir: str):
         topics = []
         lines = resp.stdout.split('\n')
 
+        category = ''
         for line in lines:
             if line == '':
                 continue
 
-            if 'Duration:' in line:
-                dur = float(re.split(r'[:s]', line)[1])
-
-            if "Start" in line:
+            if "start" in line:
                 start = float(re.split(r'[()]', line)[1])
 
-            if "End" in line:
+            if "end" in line:
                 end = float(re.split(r'[()]', line)[1])
 
-            if 'Topic:' in line:
-                topics.append(re.split(r'Topic: | \|', line)[1])
+            if 'types' in line:
+                category = 'type'
+                continue
+
+            if category == 'type':
+                if 'topics' in line:
+                    category = 'topics'
+                    topics.append(re.search(r'/[^ ]*', line).group())
+                continue
+                
+            if category == 'topics':
+                topics.append(re.search(r'/[^ ]*', line).group())
                 continue
 
             desc += line + '\n'
@@ -56,7 +65,7 @@ def getRosbagInfo(bagdir: str):
         baginfo["desc"] = desc
         baginfo["start"] = start
         baginfo["end"] = end
-        baginfo["duration"] = dur
+        baginfo["duration"] = end - start
         baginfo["topics"] = topics
         return True, baginfo
     else:
@@ -71,12 +80,12 @@ def getRosbagInfo(bagdir: str):
 def reindexBag(bagdir: str):
     cmd = 'source ' + DEFAULT_PATH
     cmd += ' && '
-    cmd += 'ros2 bag reindex ' + bagdir
+    cmd += 'rosbag reindex ' + bagdir
     resp = execCmd(cmd)
 
 
 class PushButton(ft.ElevatedButton):
-    def __init__(self, text: str | None = None, expand: bool | int | None = None, on_click=None, theme_color: str = None):
+    def __init__(self, text: str = None, expand: bool = False, on_click=None, theme_color: str = None):
         super().__init__(text=text, expand=expand, on_click=on_click, bgcolor=theme_color)
         self.theme_color = theme_color
 
@@ -126,7 +135,7 @@ class RosbagPlayer():
         self.page.theme = ft.Theme(color_scheme_seed="indigo")
         self.page.theme_mode = ft.ThemeMode.DARK
         # self.page.bgcolor = color.BLACK
-        self.page.title = "Rosbag2 Player - " + ROS_DISTRO
+        self.page.title = "Rosbag Player - " + ROS_DISTRO
         self.page.window_width = 1000
         self.page.window_height = 800
 
@@ -135,16 +144,16 @@ class RosbagPlayer():
         self.page.overlay.append(self.bag_pick_dialog)
         self.page.overlay.append(self.path_pick_dialog)
 
-        self.ad_ridx = ft.AlertDialog(
-            modal=True,
-            title=ft.Text("ros2 bag reindex"),
-            content=ft.Text("metadata.yaml is not found!\nAre you wants to ros2 bag reindex?"),
-            actions=[
-                ft.TextButton("Yes", on_click=self.ad_ridx_close),
-                ft.TextButton("No", on_click=self.ad_ridx_close),
-            ],
-            actions_alignment=ft.MainAxisAlignment.END,
-        )
+        # self.ad_ridx = ft.AlertDialog(
+        #     modal=True,
+        #     title=ft.Text("rosbag reindex"),
+        #     content=ft.Text("metadata.yaml is not found!\nAre you wants to rosbag reindex?"),
+        #     actions=[
+        #         ft.TextButton("Yes", on_click=self.ad_ridx_close),
+        #         ft.TextButton("No", on_click=self.ad_ridx_close),
+        #     ],
+        #     actions_alignment=ft.MainAxisAlignment.END,
+        # )
 
         self.ti_bag = self.createTextField(label="Rosbag", expand=True)
         self.dd_path = ft.Dropdown(label="Path", border_color = color.GREY_800, expand=True)
@@ -194,16 +203,19 @@ class RosbagPlayer():
 
     def __bt_bag_clicked(self, e):
         # print("__bt_bag_clicked")
-        self.bag_pick_dialog.pick_files(allowed_extensions=['db3'])
+        self.bag_pick_dialog.pick_files(allowed_extensions=['bag'], allow_multiple=True)
 
     def __bt_pth_clicked(self, e):
         # print("__bt_pth_clicked")
         self.path_pick_dialog.pick_files(allowed_extensions=['bash'])
 
     def __bag_picked(self, e: ft.FilePickerResultEvent):
-        # print("__bag_picked:", e.files)
+        print("__bag_picked:", e.files)
+        bags = []
         if e.files:
-            self.set_bag(e.files[0].path)
+            for item in e.files:
+                bags.append(item.path)
+            self.set_bag(bags)
             self.page.update()
 
     def __pth_picked(self, e: ft.FilePickerResultEvent):
@@ -229,12 +241,13 @@ class RosbagPlayer():
 
         cmd = 'source ' + path
         cmd += ' && '
-        cmd += 'ros2 bag play ' + bagdir
-        cmd += ' --clock 200'
+        cmd += 'rosbag play ' + str.join(' ', bagdir.split(','))
+        cmd += ' __name:=rosbag_player '
+        cmd += ' --clock '
         if self.rate != 1.0:
             cmd += ' --rate ' + str(self.rate)
         if self.offset != 0:
-            cmd += ' --start-offset ' + str(self.offset)
+            cmd += ' --start ' + str(self.offset)
         if self.loop:
             cmd += ' --loop'
         if filtered_topics:
@@ -261,15 +274,17 @@ class RosbagPlayer():
         # print("__bt_paus_call")
         cmd = 'source ' + DEFAULT_PATH
         cmd += ' && '
-        cmd += 'ros2 service call /rosbag2_player/toggle_paused rosbag2_interfaces/srv/TogglePaused'
-        execCmd(cmd)
+        cmd += 'rosservice call /rosbag_player/pause_playback '
 
         if self.is_paused:
+            cmd += 'false'
             self.is_paused = False
             self.bt_paus.text = "Pause"
         else:
+            cmd += 'true'
             self.is_paused = True
             self.bt_paus.text = "Resume"
+        execCmd(cmd).stdout.replace(' ', '')
         self.bt_paus.update()
 
     def __bt_rset_call(self, e):
@@ -321,7 +336,7 @@ class RosbagPlayer():
         elapsed = self.offset
 
         cmd = "source " + DEFAULT_PATH + " && "
-        cmd += "ros2 topic echo /clock --field clock.sec --csv"
+        cmd += "rostopic echo /clock -p"
         self.clk_proc = subprocess.Popen(cmd, shell=True, executable='/bin/bash', stdout=subprocess.PIPE, text=True, preexec_fn=os.setsid)
 
         last_stamp = 0
@@ -329,8 +344,10 @@ class RosbagPlayer():
             if self.is_paused:
                 continue
             try:
-                now = int(self.clk_proc.stdout.readline())
-            except ValueError:
+                line = self.clk_proc.stdout.readline()
+                now = float(line.split(',')[1]) / 1000000000.0
+                now = int(now)
+            except:
                 continue
             if last_stamp != now:
                 elapsed = now - int(self.baginfo["start"])
@@ -357,9 +374,9 @@ class RosbagPlayer():
 
     def save_log(self):
         print("save_log:", self.log_file)
-        bagdir = self.ti_bag.value
+        bags = self.ti_bag.value.split(',')
         log = {
-            'bagdir': bagdir,
+            'bags': bags,
             "paths": self.paths
         }
         with open(self.log_file, 'w') as f:
@@ -368,25 +385,25 @@ class RosbagPlayer():
     def load_log(self):
         print("load_log:", self.log_file)
 
-        bagdir = ''
+        bags = []
         if os.path.exists(self.log_file):
             with open(self.log_file, 'r') as f:
                 log = yaml.safe_load(f)
-                bagdir = log['bagdir']
+                bags = log['bags']
                 self.paths = log['paths']
-            self.ti_bag.value = bagdir
+            self.ti_bag.value = str.join(',', bags)
             for path in self.paths:
                 self.dd_path.options.append(ft.dropdown.Option(path))
                 self.dd_path.value = path
         else:
             self.save_log()
 
-        if bagdir != "":
-            self.set_bagdir(bagdir)
+        if bags:
+            self.set_bag(bags)
 
     def save_config(self):
-        bagdir = self.ti_bag.value
-        config_file = bagdir + "/player.conf"
+        bags = self.ti_bag.value.split(',')
+        config_file = bags[0] + ".conf"
         print("save_config:", config_file)
 
         config = {
@@ -397,13 +414,12 @@ class RosbagPlayer():
             'loop': self.loop,
         }
 
-        if os.path.exists(bagdir):
-            with open(config_file, 'w') as f:
-                yaml.dump(config, f)
+        with open(config_file, 'w') as f:
+            yaml.dump(config, f)
 
     def load_config(self):
-        bagdir = self.ti_bag.value
-        config_file = bagdir + "/player.conf"
+        bags = self.ti_bag.value.split(',')
+        config_file = bags[0] + ".conf"
         print("load_config:", config_file)
 
         try:
@@ -429,33 +445,36 @@ class RosbagPlayer():
             self.sw_lop.value = False
             self.set_filtered_topics(self.baginfo["topics"])
 
-    def set_bag(self, bag: str):
-        print('set_bag:', bag)
-        self.set_bagdir(os.path.dirname(bag))
+    def set_bag(self, bags: list):
+        print('set_bag:', bags)
+        self.ti_bag.value = str.join(',', bags)
+        self.get_baginfo(bags)
 
-    def set_bagdir(self, bagdir: str):
-        print('set_bagdir:', bagdir)
-        self.ti_bag.value = bagdir
-        self.get_baginfo(bagdir)
+    def get_baginfo(self, bags: list):
+        print("get_baginfo:", bags)
+        self.tx_info.value = ''
+        duration = 0
+        topics = []
+        start = 0
+        for bag in bags:
+            is_valid, self.baginfo = getRosbagInfo(bag)
+            self.tx_info.value += self.baginfo["desc"]
+            self.tx_info.value += '---\n'
+            duration += self.baginfo["duration"]
+            topics.extend(self.baginfo["topics"])
+            if start == 0 or start > self.baginfo["start"]:
+                start = self.baginfo["start"]
+        self.baginfo["duration"] = duration
+        self.baginfo["topics"] = list(set(topics))
+        self.baginfo["start"] = start
 
-    def get_baginfo(self, bagdir: str):
-        print("get_baginfo:", bagdir)
-        is_valid, self.baginfo = getRosbagInfo(bagdir)
-
-        print(self.baginfo)
-
-        self.tx_info.value = self.baginfo["desc"]
         self.pb_prg.max = int(self.baginfo["duration"])
         self.set_progress(0)
 
-        if os.path.exists(bagdir):
-            if not os.path.exists(bagdir + '/metadata.yaml'):
-                self.ad_ridx_open()
-
-            self.lv_tpic.clean()
-            for topic in self.baginfo["topics"]:
-                sw = self.createSwitch(label=topic, value=True)
-                self.lv_tpic.controls.append(sw)
+        self.lv_tpic.clean()
+        for topic in self.baginfo["topics"]:
+            sw = self.createSwitch(label=topic, value=True)
+            self.lv_tpic.controls.append(sw)
 
         if is_valid:
             self.bt_play.enable(True)
@@ -463,20 +482,20 @@ class RosbagPlayer():
             self.load_config()
             self.save_log()
 
-    def ad_ridx_open(self):
-        print("ad_ridx_open")
-        self.page.dialog = self.ad_ridx
-        self.ad_ridx.open = True
-        self.page.update()
+    # def ad_ridx_open(self):
+    #     print("ad_ridx_open")
+    #     self.page.dialog = self.ad_ridx
+    #     self.ad_ridx.open = True
+    #     self.page.update()
 
-    def ad_ridx_close(self, e: ft.ControlEvent):
-        print("ad_ridx_close", e.control.text)
-        self.ad_ridx.open = False
-        if e.control.text == "Yes":
-            bagdir = self.ti_bag.value
-            reindexBag(bagdir)
-            self.get_baginfo(bagdir)
-        self.page.update()
+    # def ad_ridx_close(self, e: ft.ControlEvent):
+    #     print("ad_ridx_close", e.control.text)
+    #     self.ad_ridx.open = False
+    #     if e.control.text == "Yes":
+    #         bagdir = self.ti_bag.value
+    #         reindexBag(bagdir)
+    #         self.get_baginfo(bagdir)
+    #     self.page.update()
 
     def get_filtered_topics(self):
         print("get_filtered_topics")
@@ -507,5 +526,8 @@ if __name__ == '__main__':
         print("app start with rosbag", rosbag)
     except:
         print("app start")
+    
+    cmd = 'source ' + DEFAULT_PATH + ' && roscore'
+    roscore = subprocess.Popen(cmd, shell=True, executable='/bin/bash', preexec_fn=os.setsid)
 
     ft.app(target=player.make_page)

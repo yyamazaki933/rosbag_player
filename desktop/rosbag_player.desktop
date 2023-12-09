@@ -1,0 +1,8 @@
+[Desktop Entry]
+
+Type=Application
+Version=1.0
+Name=Rosbag Player
+Exec=bash PATH/launch.sh
+Icon=rosbag_player
+Terminal=true
