@@ -5,5 +5,5 @@ Version=1.0
 Name=RosbagPlayer
 Exec=bash PATH/launch.sh %f
 Icon=rosbag_player
-MimeType=application/vnd.sqlite3;
+MimeType=application/octet-stream;
 Terminal=true

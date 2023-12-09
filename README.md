@@ -1,21 +1,19 @@
 # Rosbag Player 
 
-GUI player for Rosbag2.
+GUI player for Rosbag.
 
 <img src="img/shot.png">
 
-## Install and Setup
-
-Run setup scripts.
+## Install
 
 ```
-cd ~/rosbag_player
-./setup.sh
+bash install.sh
 ```
 
-## Usage
+## Launch
 
-Double-click the Rosbag2(.db3) file to launch the application.
+- Menu -> RosbagPlayer
+- Double-click the Rosbag
 
 ---
 
