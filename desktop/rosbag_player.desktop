@@ -2,8 +2,8 @@
 
 Type=Application
 Version=1.0
-Name=RosbagPlayer
+Name=Rosbag Player
 Exec=bash PATH/launch.sh %f
 Icon=rosbag_player
 MimeType=application/octet-stream;
-Terminal=true
+Terminal=false

@@ -2,4 +2,4 @@
 
 SCRIPT_DIR=$(cd $(dirname $0);pwd)
 
-python3 $SCRIPT_DIR/player.py $1
+screen -S rosbag_player -ADm bash -l -c "python3 $SCRIPT_DIR/player.py $1"
