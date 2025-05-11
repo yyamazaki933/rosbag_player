@@ -99,7 +99,6 @@ class PlayerWindow(QtWidgets.QWidget):
         self.pb_play.clicked.connect(self.__pb_play_call)
         self.pb_pause.clicked.connect(self.__pb_pause_call)
         self.pb_stop.clicked.connect(self.__pb_stop_call)
-        self.sb_offset.valueChanged.connect(self.__set_progress)
         self.slider.valueChanged.connect(self.__set_progress)
 
         self.pb_pause.setEnabled(False)
@@ -127,7 +126,6 @@ class PlayerWindow(QtWidgets.QWidget):
 
     def save_log(self):
         bags_str = self.le_bag.text()
-        start   = self.sb_offset.value()
         rate    = self.sb_rate.value()
         topics  = self.get_filtered_topics()
         loop    = int(self.chb_loop.checkState())
@@ -140,7 +138,7 @@ class PlayerWindow(QtWidgets.QWidget):
         log = {
             'rospath': self.rospath,
             'bags': bags,
-            'start': start,
+            'start': self.offset,
             'rate': rate,
             'topicfilter': topics,
             'loop': loop,
@@ -180,8 +178,8 @@ class PlayerWindow(QtWidgets.QWidget):
         prog_ui.show()
 
         topics = []
-        start = 0
-        end = 0
+        self.start = 0
+        self.end = 0
         baginfo = ''
         allvalid = True
         loaded = 0
@@ -191,10 +189,10 @@ class PlayerWindow(QtWidgets.QWidget):
             baginfo += info["desc"]
             baginfo += '---\n'
             topics.extend(info["topics"])
-            if start == 0 or info["start"] < start:
-                start = info["start"]
-            if end == 0 or info["end"] > end:
-                end = info["end"]
+            if self.start == 0 or info["start"] < self.start:
+                self.start = info["start"]
+            if self.end == 0 or info["end"] > self.end:
+                self.end = info["end"]
             if not valid:
                 allvalid = False
             loaded += 1
@@ -211,10 +209,10 @@ class PlayerWindow(QtWidgets.QWidget):
         self.pte_bag.setTextCursor(QTextCursor(
             self.pte_bag.document().findBlockByLineNumber(0)))
 
-        duration = int(end - start)
+        duration = int(self.end - self.start)
         self.slider.setRange(0, duration)
-        self.sb_offset.setRange(0, duration)
         self.__set_progress(0)
+        self.label_start_t.setText(str(self.start))
 
         self.sb_rate.setValue(1)
         self.chb_loop.setCheckState(QtCore.Qt.CheckState.Unchecked)
@@ -254,14 +252,13 @@ class PlayerWindow(QtWidgets.QWidget):
     def __pb_play_call(self):
         bags = self.le_bag.text()
         rate = self.sb_rate.value()
-        offset = self.sb_offset.value()
         filterd_topics = self.get_filtered_topics()
 
-        cmd = f"source {self.rospath} && rosbag play {bags.replace(',', ' ')} __name:=rosbag_player "
+        cmd = f"source {self.rospath} && rosbag play {bags.replace(',', ' ')} __name:=rosbag_player --clock"
         if rate != 1.0:
             cmd += f' --rate {rate}'
-        if offset != 0:
-            cmd += f' --start {offset}'
+        if self.offset != 0:
+            cmd += f' --start {self.offset}'
         if self.chb_loop.checkState() == QtCore.Qt.CheckState.Checked:
             cmd += ' --loop'
         if filterd_topics:
@@ -289,14 +286,21 @@ class PlayerWindow(QtWidgets.QWidget):
         msg = msg.strip()
         if not msg:
             return
+        print(msg)
+        
         match = re.search(r'Duration: [\d]+', msg)
         if not match:
             return
         elapsed_t = int(re.search(r'[\d]+', match.group()).group())
         if elapsed_t != self.elapsed_t:
             self.elapsed_t = elapsed_t
-            offset = self.sb_offset.value()
-            self.__set_progress(offset + self.elapsed_t)
+            self.__set_progress(self.offset + self.elapsed_t)
+
+        match = re.search(r'Time: [\d]+.[\d]+', msg)
+        if not match:
+            return
+        curr_t = re.search(r'[\d]+.[\d]+', match.group()).group()
+        self.label_start_t.setText(curr_t[:13])
 
     def __timer_call(self):
         if self.proc.poll() is None:
@@ -311,7 +315,8 @@ class PlayerWindow(QtWidgets.QWidget):
 
     def __set_progress(self, value):
         if not self.proc:
-            self.sb_offset.setValue(value)
+            self.offset = value
+            self.label_start_t.setText(str(self.start+value))
         self.slider.setValue(value)
         self.label_time.setText(f"{value} / {self.slider.maximum()}")
 
@@ -333,8 +338,7 @@ class PlayerWindow(QtWidgets.QWidget):
                 QApplication.processEvents()
                 sleep(0.1)
 
-        start = self.sb_offset.value()
-        self.__set_progress(start)
+        self.__set_progress(self.offset)
         self.pb_play.setEnabled(True)
         self.pb_pause.setEnabled(False)
         self.pb_pause.setText('Pause')
