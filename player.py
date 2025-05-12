@@ -92,6 +92,9 @@ class PlayerWindow(QtWidgets.QWidget):
 
         self.rospath    = DEF_ROS_PATH
         self.proc       = None
+        self.start      = 0
+        self.end        = 0
+        self.offset     = 0
         self.elapsed_t  = 0
         self.log_file   = SCRIPT_DIR / "player.log"
 
